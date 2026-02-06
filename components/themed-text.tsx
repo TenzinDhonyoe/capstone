@@ -1,11 +1,27 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { Typography, BrandColors } from '@/constants/theme';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  type?:
+    | 'default'
+    | 'title'
+    | 'defaultSemiBold'
+    | 'subtitle'
+    | 'link'
+    | 'hero'
+    | 'h1'
+    | 'h2'
+    | 'h3'
+    | 'body'
+    | 'bodyBold'
+    | 'caption'
+    | 'small'
+    | 'metric'
+    | 'metricUnit';
 };
 
 export function ThemedText({
@@ -21,11 +37,7 @@ export function ThemedText({
     <Text
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        styles[type] ?? styles.default,
         style,
       ]}
       {...rest}
@@ -55,6 +67,16 @@ const styles = StyleSheet.create({
   link: {
     lineHeight: 30,
     fontSize: 16,
-    color: '#0a7ea4',
+    color: BrandColors.orange,
   },
+  hero: Typography.hero,
+  h1: Typography.h1,
+  h2: Typography.h2,
+  h3: Typography.h3,
+  body: Typography.body,
+  bodyBold: Typography.bodyBold,
+  caption: Typography.caption,
+  small: Typography.small,
+  metric: Typography.metric,
+  metricUnit: Typography.metricUnit,
 });
