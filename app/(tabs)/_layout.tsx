@@ -21,9 +21,12 @@ export default function TabLayout() {
         tabBarStyle: Platform.select({
           ios: {
             backgroundColor: theme.surface,
+            borderTopWidth: 0,
           },
           default: {
             backgroundColor: theme.surface,
+            borderTopWidth: 0,
+            elevation: 0,
           },
         }),
       }}

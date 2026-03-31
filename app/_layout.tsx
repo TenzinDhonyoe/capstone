@@ -8,12 +8,13 @@ import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { BLEProvider } from '@/contexts/ble-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AppThemeProvider, useAppTheme } from '@/contexts/theme-context';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { isAuthenticated, hasCompletedOnboarding } = useAuth();
+  const { effectiveColorScheme } = useAppTheme();
   const segments = useSegments();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
@@ -39,20 +40,21 @@ function RootNavigator() {
   }, [isAuthenticated, hasCompletedOnboarding, isMounted]);
 
   return (
-    <Stack
-      screenOptions={{ headerShown: false }}
-      screenListeners={{ state: () => { if (!isMounted) onLayoutReady(); } }}
-    >
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(onboarding)" />
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <ThemeProvider value={effectiveColorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack
+        screenOptions={{ headerShown: false }}
+        screenListeners={{ state: () => { if (!isMounted) onLayoutReady(); } }}
+      >
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(onboarding)" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+      <StatusBar style={effectiveColorScheme === 'dark' ? 'light' : 'dark'} />
+    </ThemeProvider>
   );
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   const [fontsLoaded] = useFonts({
     Outfit_300Light,
     Outfit_400Regular,
@@ -68,10 +70,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <BLEProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <AppThemeProvider>
           <RootNavigator />
-          <StatusBar style="auto" />
-        </ThemeProvider>
+        </AppThemeProvider>
       </BLEProvider>
     </AuthProvider>
   );

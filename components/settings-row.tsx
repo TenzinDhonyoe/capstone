@@ -31,6 +31,7 @@ export function SettingsRow({
   const textColor = useThemeColor({}, 'text');
   const secondaryText = useThemeColor({}, 'textSecondary');
   const separator = useThemeColor({}, 'separator');
+  const inputBg = useThemeColor({}, 'inputBackground');
 
   const content = (
     <View style={[styles.row, { borderBottomColor: separator }]}>
@@ -60,7 +61,7 @@ export function SettingsRow({
           <Switch
             value={toggleValue}
             onValueChange={onToggle}
-            trackColor={{ true: BrandColors.orange, false: '#E5E5EA' }}
+            trackColor={{ true: BrandColors.orange, false: inputBg }}
             thumbColor="#FFFFFF"
           />
         )}

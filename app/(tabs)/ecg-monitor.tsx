@@ -63,6 +63,7 @@ export default function ECGMonitorScreen() {
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
   const buttonBg = useThemeColor({}, 'buttonBackground');
+  const buttonTextColor = useThemeColor({}, 'buttonText');
 
   // Update metrics from real ECG data when connected
   useEffect(() => {
@@ -329,9 +330,9 @@ export default function ECGMonitorScreen() {
           <Ionicons
             name={isRecording ? 'stop' : 'play'}
             size={24}
-            color="#FFFFFF"
+            color={isRecording ? '#FFFFFF' : buttonTextColor}
           />
-          <Text style={styles.recordButtonText}>
+          <Text style={[styles.recordButtonText, !isRecording && { color: buttonTextColor }]}>
             {isRecording ? 'Stop Recording' : 'Start Recording'}
           </Text>
         </TouchableOpacity>

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/contexts/auth-context';
+import { useAppTheme } from '@/contexts/theme-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { SettingsRow } from '@/components/settings-row';
 import { Button } from '@/components/ui/button';
@@ -17,10 +18,10 @@ import {
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const { themeMode, setThemeMode } = useAppTheme();
   const [recordingAlerts, setRecordingAlerts] = useState(true);
   const [pathologyNotifs, setPathologyNotifs] = useState(true);
   const [weeklySummary, setWeeklySummary] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
 
   const bg = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
@@ -117,8 +118,8 @@ export default function ProfileScreen() {
             iconColor="#6366F1"
             title="Dark Mode"
             type="toggle"
-            toggleValue={darkMode}
-            onToggle={setDarkMode}
+            toggleValue={themeMode === 'dark'}
+            onToggle={(on) => setThemeMode(on ? 'dark' : 'light')}
           />
         </View>
 
