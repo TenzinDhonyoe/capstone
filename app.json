@@ -4,7 +4,7 @@
     "slug": "sowa_capstone",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/Untitled design (1).png",
+    "icon": "./assets/images/heart_app_icon.png",
     "scheme": "sowacapstone",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
