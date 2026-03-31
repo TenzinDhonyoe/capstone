@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/contexts/auth-context';
@@ -16,7 +18,7 @@ import { MetricCard } from '@/components/metric-card';
 import { RecordingCard } from '@/components/recording-card';
 import { AlertBanner } from '@/components/alert-banner';
 import { BrandColors, Spacing, Typography, BorderRadius, StatusColors } from '@/constants/theme';
-import { mockRecordings } from '@/data/mock-recordings';
+import { getRecordings, type SavedRecording } from '@/services/recording-storage';
 import { analyzeECGBuffer } from '@/services/ecg-analysis';
 
 function getGreeting(): string {
@@ -32,22 +34,31 @@ export default function DashboardScreen() {
   const { isConnected, connectedDevice, connectionStatus } = useBLE();
   const { ecgDataBuffer } = useECGStream();
 
+  const [recordings, setRecordings] = useState<SavedRecording[]>([]);
+
   const bg = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const secondaryText = useThemeColor({}, 'textSecondary');
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
 
-  const recentRecordings = mockRecordings.slice(0, 3);
-  const latestPathology = mockRecordings.find((r) => r.hasPathology);
+  // Reload recordings when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      getRecordings().then(setRecordings);
+    }, [])
+  );
+
+  const recentRecordings = recordings.slice(0, 3);
+  const latestPathology = recordings.find((r) => r.hasPathology);
 
   // Get real metrics when connected
   const realMetrics = isConnected && ecgDataBuffer.length > 0
     ? analyzeECGBuffer(ecgDataBuffer)
     : null;
 
-  const currentHR = realMetrics?.heartRate ?? mockRecordings[0]?.bpm ?? 72;
-  const currentHRV = realMetrics?.hrv ?? mockRecordings[0]?.hrv ?? 48;
+  const currentHR = realMetrics?.heartRate ?? (recentRecordings[0]?.bpm || '--');
+  const currentHRV = realMetrics?.hrv ?? (recentRecordings[0]?.hrv || '--');
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
@@ -152,7 +163,7 @@ export default function DashboardScreen() {
           />
           <MetricCard
             title="Last Recording"
-            value={mockRecordings[0]?.duration ?? '2:30'}
+            value={recentRecordings[0]?.duration ?? '--'}
             trend="stable"
           />
           <MetricCard
@@ -190,18 +201,27 @@ export default function DashboardScreen() {
             <Text style={styles.seeAll}>See All</Text>
           </TouchableOpacity>
         </View>
-        {recentRecordings.map((recording) => (
-          <RecordingCard
-            key={recording.id}
-            date={recording.date}
-            time={recording.time}
-            bpm={recording.bpm}
-            duration={recording.duration}
-            condition={recording.condition}
-            status={recording.status}
-            onPress={() => router.push(`/(tabs)/history/${recording.id}`)}
-          />
-        ))}
+        {recentRecordings.length > 0 ? (
+          recentRecordings.map((recording) => (
+            <RecordingCard
+              key={recording.id}
+              date={recording.date}
+              time={recording.time}
+              bpm={recording.bpm}
+              duration={recording.duration}
+              condition={recording.condition}
+              status={recording.status}
+              onPress={() => router.push(`/(tabs)/history/${recording.id}`)}
+            />
+          ))
+        ) : (
+          <View style={[styles.emptyRecordings, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+            <Ionicons name="pulse-outline" size={32} color={secondaryText} />
+            <Text style={[styles.emptyText, { color: secondaryText }]}>
+              No recordings yet. Connect your sensor and start recording.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -336,5 +356,16 @@ const styles = StyleSheet.create({
   metricsRow: {
     gap: Spacing.sm + 2,
     paddingRight: Spacing.md,
+  },
+  emptyRecordings: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  emptyText: {
+    ...Typography.body,
+    textAlign: 'center',
   },
 });

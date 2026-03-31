@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,12 +8,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { RecordingCard } from '@/components/recording-card';
 import { BrandColors, Spacing, Typography, BorderRadius } from '@/constants/theme';
-import { mockRecordings, type Recording } from '@/data/mock-recordings';
+import { getRecordings, type SavedRecording } from '@/services/recording-storage';
 
 type Filter = 'all' | 'normal' | 'warning' | 'critical';
 
@@ -26,6 +27,7 @@ const filterOptions: { key: Filter; label: string }[] = [
 
 export default function HistoryListScreen() {
   const [activeFilter, setActiveFilter] = useState<Filter>('all');
+  const [recordings, setRecordings] = useState<SavedRecording[]>([]);
   const router = useRouter();
 
   const bg = useThemeColor({}, 'background');
@@ -34,16 +36,23 @@ export default function HistoryListScreen() {
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
 
+  // Reload recordings every time the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      getRecordings().then(setRecordings);
+    }, [])
+  );
+
   const filteredRecordings = useMemo(() => {
-    if (activeFilter === 'all') return mockRecordings;
+    if (activeFilter === 'all') return recordings;
     if (activeFilter === 'normal')
-      return mockRecordings.filter(
+      return recordings.filter(
         (r) => r.status === 'optimal' || r.status === 'normal'
       );
-    return mockRecordings.filter((r) => r.status === activeFilter);
-  }, [activeFilter]);
+    return recordings.filter((r) => r.status === activeFilter);
+  }, [activeFilter, recordings]);
 
-  const renderItem = ({ item }: { item: Recording }) => (
+  const renderItem = ({ item }: { item: SavedRecording }) => (
     <RecordingCard
       date={item.date}
       time={item.time}

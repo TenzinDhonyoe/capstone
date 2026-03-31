@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File, Paths } from 'expo-file-system';
 
 const RECORDINGS_KEY = 'sowa_recordings';
 
@@ -9,6 +10,9 @@ export interface SavedRecording {
   duration: string;
   bpm: number;
   hrv: number;
+  prInterval: number;
+  qtInterval: number;
+  rhythm: string;
   condition: string;
   status: 'optimal' | 'normal' | 'warning' | 'critical';
   hasPathology: boolean;
@@ -46,7 +50,49 @@ export async function deleteRecording(id: string): Promise<void> {
     const recordings = await getRecordings();
     const filtered = recordings.filter((r) => r.id !== id);
     await AsyncStorage.setItem(RECORDINGS_KEY, JSON.stringify(filtered));
+    await deleteRawSamples(id);
   } catch {
     console.warn('Failed to delete recording');
+  }
+}
+
+/**
+ * Save raw ECG samples to filesystem for waveform replay.
+ */
+export async function saveRawSamples(recordingId: string, samples: number[]): Promise<void> {
+  try {
+    const file = new File(Paths.document, 'recordings', `${recordingId}.json`);
+    await file.write(JSON.stringify(samples));
+  } catch {
+    console.warn('Failed to save raw ECG samples');
+  }
+}
+
+/**
+ * Load raw ECG samples from filesystem.
+ * Returns null if no samples exist for this recording.
+ */
+export async function getRawSamples(recordingId: string): Promise<number[] | null> {
+  try {
+    const file = new File(Paths.document, 'recordings', `${recordingId}.json`);
+    if (!file.exists) return null;
+    const data = await file.text();
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete raw ECG samples file.
+ */
+async function deleteRawSamples(recordingId: string): Promise<void> {
+  try {
+    const file = new File(Paths.document, 'recordings', `${recordingId}.json`);
+    if (file.exists) {
+      await file.delete();
+    }
+  } catch {
+    // Non-critical
   }
 }

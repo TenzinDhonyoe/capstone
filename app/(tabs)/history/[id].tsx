@@ -1,25 +1,39 @@
+'use no memo';
+
 import {
   StyleSheet,
   View,
   Text,
   ScrollView,
   TouchableOpacity,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { MetricCard } from '@/components/metric-card';
 import { AlertBanner } from '@/components/alert-banner';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
+import { ECGWaveform } from '@/components/ecg-waveform';
 import { Spacing, Typography, BorderRadius } from '@/constants/theme';
-import { mockRecordings } from '@/data/mock-recordings';
+import { getRecordingById, getRawSamples, type SavedRecording } from '@/services/recording-storage';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const WAVEFORM_WIDTH = SCREEN_WIDTH - Spacing.md * 2;
+const WAVEFORM_HEIGHT = 200;
 
 export default function RecordingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
+  const [recording, setRecording] = useState<SavedRecording | null>(null);
+  const [rawSamples, setRawSamples] = useState<number[] | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const bg = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
@@ -27,7 +41,30 @@ export default function RecordingDetailScreen() {
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
 
-  const recording = mockRecordings.find((r) => r.id === id);
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([getRecordingById(id), getRawSamples(id)])
+      .then(([rec, samples]) => {
+        setRecording(rec);
+        setRawSamples(samples);
+      })
+      .catch(() => {
+        // Failed to load — recording will show as not found
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [id]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!recording) {
     return (
@@ -41,6 +78,9 @@ export default function RecordingDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const formatInterval = (value: number | undefined): string =>
+    value && value > 0 ? String(value) : 'N/A';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
@@ -58,6 +98,25 @@ export default function RecordingDetailScreen() {
             <Text style={[styles.time, { color: secondaryText }]}>{recording.time}</Text>
           </View>
         </View>
+
+        {/* ECG Waveform Replay */}
+        {rawSamples && rawSamples.length > 0 ? (
+          <View style={styles.waveformSection}>
+            <ECGWaveform
+              width={WAVEFORM_WIDTH}
+              height={WAVEFORM_HEIGHT}
+              isAnimating={true}
+              staticData={rawSamples}
+            />
+          </View>
+        ) : (
+          <View style={[styles.noWaveform, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+            <Ionicons name="pulse-outline" size={32} color={secondaryText} />
+            <Text style={[styles.noWaveformText, { color: secondaryText }]}>
+              No waveform data available
+            </Text>
+          </View>
+        )}
 
         {/* Metrics Grid */}
         <View style={styles.metricsGrid}>
@@ -89,14 +148,14 @@ export default function RecordingDetailScreen() {
             <View style={styles.metricItem}>
               <MetricCard
                 title="PR Interval"
-                value={recording.prInterval}
+                value={formatInterval(recording.prInterval)}
                 unit="ms"
               />
             </View>
             <View style={styles.metricItem}>
               <MetricCard
                 title="QT Interval"
-                value={recording.qtInterval}
+                value={formatInterval(recording.qtInterval)}
                 unit="ms"
               />
             </View>
@@ -114,7 +173,7 @@ export default function RecordingDetailScreen() {
             Rhythm Classification
           </Text>
           <Text style={[styles.rhythmValue, { color: textColor }]}>
-            {recording.rhythm}
+            {recording.rhythm ?? recording.condition}
           </Text>
           <StatusBadge status={recording.status} label={recording.condition} />
         </View>
@@ -189,6 +248,26 @@ const styles = StyleSheet.create({
   },
   time: {
     ...Typography.caption,
+  },
+  waveformSection: {
+    marginBottom: Spacing.md,
+  },
+  noWaveform: {
+    height: WAVEFORM_HEIGHT,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  noWaveformText: {
+    ...Typography.caption,
+  },
+  loadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   metricsGrid: {
     marginTop: Spacing.md,

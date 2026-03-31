@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { StyleSheet, View, useColorScheme } from 'react-native';
+import { StyleSheet, View, Text, useColorScheme } from 'react-native';
 import {
   Canvas,
   Path,
@@ -34,25 +34,33 @@ export function ECGWaveform({
   const gridColorMajor = isDark ? '#3A1A1A' : '#FFCCC0';
   const gridColorMinor = isDark ? '#2A1212' : '#FFE0D8';
   const waveColor = isDark ? '#4ADE80' : '#22C55E';
+  const textColor = isDark ? '#666666' : '#999999';
 
   const visiblePoints = Math.round(SAMPLE_RATE * VISIBLE_SECONDS);
   const pointSpacing = width / visiblePoints;
   const samplesPerTick = Math.round(SAMPLE_RATE / FPS);
 
-  const data = staticData ?? ecgSignalBuffer;
+  // Determine data source:
+  // - staticData provided with data: use real data
+  // - staticData provided but empty: show "waiting" state
+  // - staticData undefined: use mock signal (disconnected preview)
+  const isWaiting = staticData !== undefined && staticData.length === 0;
+  const data = isWaiting ? null : (staticData ?? ecgSignalBuffer);
 
   useEffect(() => {
-    if (!isAnimating) return;
+    if (!isAnimating || !data || data.length === 0) return;
 
     const interval = setInterval(() => {
       setOffset((prev) => (prev + samplesPerTick) % data.length);
     }, 1000 / FPS);
 
     return () => clearInterval(interval);
-  }, [isAnimating, data.length, samplesPerTick]);
+  }, [isAnimating, data?.length, samplesPerTick]);
 
   // Build the waveform path
   const waveformPath = useMemo(() => {
+    if (!data || data.length === 0) return null;
+
     const path = Skia.Path.Make();
     const baseline = height * 0.55;
     const amplitude = height * 0.4;
@@ -71,6 +79,16 @@ export function ECGWaveform({
     }
     return path;
   }, [offset, isAnimating, height, width, data, visiblePoints, pointSpacing]);
+
+  // Flat line path for waiting state
+  const flatLinePath = useMemo(() => {
+    if (!isWaiting) return null;
+    const path = Skia.Path.Make();
+    const baseline = height * 0.55;
+    path.moveTo(0, baseline);
+    path.lineTo(width, baseline);
+    return path;
+  }, [isWaiting, height, width]);
 
   // Generate grid lines (memoized since they don't change with offset)
   const gridLines = useMemo(() => {
@@ -97,16 +115,34 @@ export function ECGWaveform({
             strokeWidth={line.major ? 0.8 : 0.4}
           />
         ))}
-        {/* ECG waveform */}
-        <Path
-          path={waveformPath}
-          color={waveColor}
-          style="stroke"
-          strokeWidth={2}
-          strokeCap="round"
-          strokeJoin="round"
-        />
+        {/* ECG waveform or flat line */}
+        {waveformPath && (
+          <Path
+            path={waveformPath}
+            color={waveColor}
+            style="stroke"
+            strokeWidth={2}
+            strokeCap="round"
+            strokeJoin="round"
+          />
+        )}
+        {flatLinePath && (
+          <Path
+            path={flatLinePath}
+            color={waveColor}
+            style="stroke"
+            strokeWidth={1.5}
+            strokeCap="round"
+          />
+        )}
       </Canvas>
+      {isWaiting && (
+        <View style={styles.waitingOverlay}>
+          <Text style={[styles.waitingText, { color: textColor }]}>
+            Waiting for signal...
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -115,5 +151,15 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  waitingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  waitingText: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
 });

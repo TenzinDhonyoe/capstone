@@ -27,15 +27,10 @@ import {
   StatusColors,
   Typography,
 } from '@/constants/theme';
-import {
-  defaultECGMetrics,
-  getVariedMetrics,
-  type ECGMetrics,
-} from '@/data/mock-ecg-metrics';
+import { type ECGMetrics, initialECGMetrics, analyzeECGBuffer } from '@/services/ecg-analysis';
 import { useBLE, useECGStream } from '@/hooks/use-ble';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { analyzeECGBuffer } from '@/services/ecg-analysis';
-import { saveRecording, type SavedRecording } from '@/services/recording-storage';
+import { saveRecording, saveRawSamples, type SavedRecording } from '@/services/recording-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WAVEFORM_WIDTH = SCREEN_WIDTH - Spacing.md * 2;
@@ -44,14 +39,19 @@ const WAVEFORM_HEIGHT = 220;
 export default function ECGMonitorScreen() {
   const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
-  const [metrics, setMetrics] = useState<ECGMetrics>(defaultECGMetrics);
+  const [metrics, setMetrics] = useState<ECGMetrics>(initialECGMetrics);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showDeviceList, setShowDeviceList] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const metricsRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartTime = useRef<Date | null>(null);
+
+  // Recording buffer: accumulates samples during recording
+  const recordingBufferRef = useRef<number[]>([]);
+  const lastBufferLengthRef = useRef(0);
+  const metricsRef = useRef<ECGMetrics>(initialECGMetrics);
+  const MAX_RECORDING_SAMPLES = 250 * 60 * 30; // 30 minutes max
 
   // BLE state
   const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions } = useBLE();
@@ -71,39 +71,63 @@ export default function ECGMonitorScreen() {
 
     const result = analyzeECGBuffer(ecgDataBuffer);
     if (result) {
-      setMetrics((prev) => ({
-        ...prev,
-        heartRate: result.heartRate || prev.heartRate,
-        hrv: result.hrv,
-        signalQuality: result.signalQuality,
-      }));
+      setMetrics(result);
+      metricsRef.current = result;
     }
   }, [isConnected, ecgDataBuffer]);
+
+  // Accumulate samples into recording buffer during recording
+  useEffect(() => {
+    if (!isRecording || !isConnected) return;
+    if (recordingBufferRef.current.length >= MAX_RECORDING_SAMPLES) return;
+
+    const currentLength = ecgDataBuffer.length;
+    const prevLength = lastBufferLengthRef.current;
+
+    if (currentLength > prevLength) {
+      // New samples arrived — append only the delta
+      const newSamples = ecgDataBuffer.slice(prevLength);
+      for (let i = 0; i < newSamples.length; i++) {
+        recordingBufferRef.current.push(newSamples[i]);
+      }
+    } else if (currentLength < prevLength && currentLength > 0) {
+      // Buffer was trimmed (sliding window wrapped)
+      // Only append from index 0 to currentLength (the new post-trim data)
+      for (let i = 0; i < currentLength; i++) {
+        recordingBufferRef.current.push(ecgDataBuffer[i]);
+      }
+    }
+
+    lastBufferLengthRef.current = currentLength;
+  }, [isRecording, isConnected, ecgDataBuffer]);
+
+  // Reset buffer tracking when connection state changes
+  useEffect(() => {
+    if (isConnected) {
+      lastBufferLengthRef.current = 0;
+    }
+  }, [isConnected]);
 
   const startRecording = useCallback(() => {
     setIsRecording(true);
     setElapsedSeconds(0);
     setSavedBanner(null);
     recordingStartTime.current = new Date();
+    recordingBufferRef.current = [];
+    lastBufferLengthRef.current = 0;
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
     }, 1000);
-
-    // Only use mock metrics when not connected to a real device
-    if (!isConnected) {
-      metricsRef.current = setInterval(() => {
-        setMetrics((prev) => getVariedMetrics(prev));
-      }, 2500);
-    }
-  }, [isConnected]);
+  }, []);
 
   const stopRecording = useCallback(async () => {
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
-    if (metricsRef.current) clearInterval(metricsRef.current);
     timerRef.current = null;
-    metricsRef.current = null;
+
+    // Use ref for latest metrics to avoid stale closure
+    const currentMetrics = metricsRef.current;
 
     // Save recording
     const now = recordingStartTime.current ?? new Date();
@@ -116,29 +140,38 @@ export default function ECGMonitorScreen() {
       date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       time: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
       duration: `${mins}:${secs.toString().padStart(2, '0')}`,
-      bpm: metrics.heartRate,
-      hrv: metrics.hrv,
-      condition: metrics.rhythm,
-      status: metrics.rhythm === 'Normal Sinus Rhythm' ? 'optimal' : 'warning',
-      hasPathology: metrics.rhythm !== 'Normal Sinus Rhythm',
-      pathologyNote: metrics.rhythm !== 'Normal Sinus Rhythm'
-        ? `Detected: ${metrics.rhythm}`
+      bpm: currentMetrics.heartRate,
+      hrv: currentMetrics.hrv,
+      prInterval: currentMetrics.prInterval,
+      qtInterval: currentMetrics.qtInterval,
+      rhythm: currentMetrics.rhythm,
+      condition: currentMetrics.rhythm,
+      status: currentMetrics.rhythm === 'Normal Sinus Rhythm' ? 'optimal' : 'warning',
+      hasPathology: currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...',
+      pathologyNote: currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...'
+        ? `Detected: ${currentMetrics.rhythm}`
         : '',
-      sampleCount: ecgDataBuffer.length,
+      sampleCount: recordingBufferRef.current.length,
     };
 
     await saveRecording(recording);
+
+    // Save raw ECG samples to filesystem
+    if (recordingBufferRef.current.length > 0) {
+      await saveRawSamples(id, recordingBufferRef.current);
+    }
+    recordingBufferRef.current = [];
+
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSavedBanner(id);
 
     // Auto-dismiss after 5 seconds
     setTimeout(() => setSavedBanner(null), 5000);
-  }, [elapsedSeconds, metrics, ecgDataBuffer.length]);
+  }, [elapsedSeconds]);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (metricsRef.current) clearInterval(metricsRef.current);
     };
   }, []);
 
@@ -149,6 +182,9 @@ export default function ECGMonitorScreen() {
   };
 
   const heartRateStatus = metrics.heartRate > 100 || metrics.heartRate < 50 ? 'warning' : 'optimal';
+
+  // Format interval display: show "N/A" when value is 0 (unable to detect)
+  const formatInterval = (value: number): string => (value > 0 ? String(value) : 'N/A');
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
@@ -220,7 +256,7 @@ export default function ECGMonitorScreen() {
             width={WAVEFORM_WIDTH}
             height={WAVEFORM_HEIGHT}
             isAnimating={isRecording || (isConnected && ecgDataBuffer.length > 0)}
-            staticData={isConnected && ecgDataBuffer.length > 0 ? ecgDataBuffer : undefined}
+            staticData={isConnected ? ecgDataBuffer : undefined}
           />
         </View>
 
@@ -233,11 +269,11 @@ export default function ECGMonitorScreen() {
               color={heartRateStatus === 'optimal' ? StatusColors.green : StatusColors.red}
             />
             <Text style={[styles.heroValue, { color: textColor }]}>
-              {isConnected || isRecording ? metrics.heartRate : '--'}
+              {isConnected && metrics.heartRate > 0 ? metrics.heartRate : '--'}
             </Text>
             <Text style={[styles.heroUnit, { color: secondaryText }]}>BPM</Text>
           </View>
-          {(isConnected || isRecording) && (
+          {isConnected && metrics.heartRate > 0 && (
             <StatusBadge
               status={heartRateStatus}
             />
@@ -247,12 +283,12 @@ export default function ECGMonitorScreen() {
         {/* Signal Quality + Rhythm Row */}
         <View style={styles.statusRow}>
           <View style={styles.statusItem}>
-            <SignalQualityBar quality={isConnected ? bleSignalQuality : metrics.signalQuality} />
+            <SignalQualityBar quality={isConnected ? bleSignalQuality : 0} />
           </View>
           <View style={[styles.rhythmBadge, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <Text style={[styles.rhythmLabel, { color: secondaryText }]}>Rhythm</Text>
             <Text style={[styles.rhythmValue, { color: textColor }]} numberOfLines={1}>
-              {metrics.rhythm}
+              {isConnected ? metrics.rhythm : '--'}
             </Text>
           </View>
         </View>
@@ -277,24 +313,30 @@ export default function ECGMonitorScreen() {
           <View style={styles.detailGrid}>
             <View style={[styles.detailCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
               <Text style={[styles.detailLabel, { color: secondaryText }]}>HRV</Text>
-              <Text style={[styles.detailValue, { color: textColor }]}>{metrics.hrv}</Text>
+              <Text style={[styles.detailValue, { color: textColor }]}>
+                {isConnected && metrics.hrv > 0 ? metrics.hrv : '--'}
+              </Text>
               <Text style={[styles.detailUnit, { color: secondaryText }]}>ms</Text>
             </View>
             <View style={[styles.detailCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
               <Text style={[styles.detailLabel, { color: secondaryText }]}>PR Interval</Text>
-              <Text style={[styles.detailValue, { color: textColor }]}>{metrics.prInterval}</Text>
+              <Text style={[styles.detailValue, { color: textColor }]}>
+                {isConnected ? formatInterval(metrics.prInterval) : '--'}
+              </Text>
               <Text style={[styles.detailUnit, { color: secondaryText }]}>ms</Text>
             </View>
             <View style={[styles.detailCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
               <Text style={[styles.detailLabel, { color: secondaryText }]}>QT Interval</Text>
-              <Text style={[styles.detailValue, { color: textColor }]}>{metrics.qtInterval}</Text>
+              <Text style={[styles.detailValue, { color: textColor }]}>
+                {isConnected ? formatInterval(metrics.qtInterval) : '--'}
+              </Text>
               <Text style={[styles.detailUnit, { color: secondaryText }]}>ms</Text>
             </View>
           </View>
         )}
 
         {/* Pathology Alert */}
-        {metrics.rhythm !== 'Normal Sinus Rhythm' && (
+        {isConnected && metrics.rhythm !== 'Normal Sinus Rhythm' && metrics.rhythm !== 'Analyzing...' && (
           <View style={styles.section}>
             <AlertBanner
               type="warning"
@@ -315,27 +357,45 @@ export default function ECGMonitorScreen() {
         )}
 
         {/* Start/Stop Button */}
-        <TouchableOpacity
-          style={[
-            styles.recordButton,
-            isRecording
-              ? styles.stopButton
-              : { backgroundColor: buttonBg },
-          ]}
-          onPress={isRecording ? stopRecording : startRecording}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={isRecording ? 'Stop recording' : 'Start recording'}
-        >
-          <Ionicons
-            name={isRecording ? 'stop' : 'play'}
-            size={24}
-            color={isRecording ? '#FFFFFF' : buttonTextColor}
-          />
-          <Text style={[styles.recordButtonText, !isRecording && { color: buttonTextColor }]}>
-            {isRecording ? 'Stop Recording' : 'Start Recording'}
-          </Text>
-        </TouchableOpacity>
+        {isConnected ? (
+          <TouchableOpacity
+            style={[
+              styles.recordButton,
+              isRecording
+                ? styles.stopButton
+                : { backgroundColor: buttonBg },
+            ]}
+            onPress={isRecording ? stopRecording : startRecording}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={isRecording ? 'Stop recording' : 'Start recording'}
+          >
+            <Ionicons
+              name={isRecording ? 'stop' : 'play'}
+              size={24}
+              color={isRecording ? '#FFFFFF' : buttonTextColor}
+            />
+            <Text style={[styles.recordButtonText, !isRecording && { color: buttonTextColor }]}>
+              {isRecording ? 'Stop Recording' : 'Start Recording'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.recordButton, styles.disabledButton]}
+            onPress={() => {
+              requestPermissions();
+              setShowDeviceList(true);
+            }}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Connect sensor to record"
+          >
+            <Ionicons name="bluetooth-outline" size={24} color="#999999" />
+            <Text style={[styles.recordButtonText, styles.disabledButtonText]}>
+              Connect Sensor to Record
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* BLE Device List Modal */}
@@ -536,6 +596,12 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     backgroundColor: StatusColors.red,
+  },
+  disabledButton: {
+    backgroundColor: '#E5E5E5',
+  },
+  disabledButtonText: {
+    color: '#999999',
   },
   recordButtonText: {
     ...Typography.bodyBold,
