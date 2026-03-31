@@ -7,6 +7,11 @@ const STORAGE_KEY = '@sowa/theme-mode';
 type ThemeMode = 'system' | 'light' | 'dark';
 type ColorScheme = 'light' | 'dark';
 
+interface ThemeState {
+  themeMode: ThemeMode;
+  isLoaded: boolean;
+}
+
 interface ThemeContextValue {
   themeMode: ThemeMode;
   effectiveColorScheme: ColorScheme;
@@ -21,34 +26,37 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 export function AppThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useRNColorScheme();
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [state, setState] = useState<ThemeState>({
+    themeMode: 'system',
+    isLoaded: false,
+  });
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored === 'light' || stored === 'dark' || stored === 'system') {
-        setThemeModeState(stored);
+        setState({ themeMode: stored, isLoaded: true });
+      } else {
+        setState((prev) => ({ ...prev, isLoaded: true }));
       }
-      setIsLoaded(true);
     }).catch(() => {
-      setIsLoaded(true);
+      setState((prev) => ({ ...prev, isLoaded: true }));
     });
   }, []);
 
   const setThemeMode = useCallback((mode: ThemeMode) => {
-    setThemeModeState(mode);
+    setState((prev) => ({ ...prev, themeMode: mode }));
     try {
       AsyncStorage.setItem(STORAGE_KEY, mode);
     } catch {}
   }, []);
 
   const effectiveColorScheme: ColorScheme =
-    themeMode === 'system' ? (systemScheme ?? 'light') : themeMode;
+    state.themeMode === 'system' ? (systemScheme ?? 'light') : state.themeMode;
 
-  if (!isLoaded) return null;
+  if (!state.isLoaded) return null;
 
   return (
-    <ThemeContext.Provider value={{ themeMode, effectiveColorScheme, setThemeMode }}>
+    <ThemeContext.Provider value={{ themeMode: state.themeMode, effectiveColorScheme, setThemeMode }}>
       {children}
     </ThemeContext.Provider>
   );
