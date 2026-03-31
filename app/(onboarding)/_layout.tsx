@@ -6,12 +6,6 @@ export default function OnboardingLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-        <Stack.Screen
-          name="slides"
-          options={{
-            animation: 'fade',
-          }}
-        />
       </Stack>
     </GestureHandlerRootView>
   );

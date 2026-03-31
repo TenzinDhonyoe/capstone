@@ -1,5 +1,6 @@
 'use no memo';
 
+import { Button } from '@/components/ui/button';
 import { BrandColors, Spacing, Typography } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -71,7 +72,6 @@ export function ValentineSlide({ onAccept }: ValentineSlideProps) {
   const [noTextIndex, setNoTextIndex] = useState(0);
   const [accepted, setAccepted] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // No button dodge
   const noTranslateX = useSharedValue(0);
@@ -104,12 +104,12 @@ export function ValentineSlide({ onAccept }: ValentineSlideProps) {
 
     const maxX = width * 0.3;
     const maxY = 120;
-    noTranslateX.value = withSpring((Math.random() - 0.5) * 2 * maxX, { damping: 10, stiffness: 200 });
-    noTranslateY.value = withSpring((Math.random() - 0.5) * 2 * maxY, { damping: 10, stiffness: 200 });
+    noTranslateX.value = withTiming((Math.random() - 0.5) * 2 * maxX, { duration: 200 });
+    noTranslateY.value = withTiming((Math.random() - 0.5) * 2 * maxY, { duration: 200 });
 
     const newScale = Math.min(currentYesScale.current + YES_SCALE_INCREMENT, YES_MAX_SCALE);
     currentYesScale.current = newScale;
-    yesScale.value = withSpring(newScale, { damping: 8, stiffness: 150 });
+    yesScale.value = withTiming(newScale, { duration: 200 });
 
     setNoTextIndex((prev) => (prev + 1) % NO_TEXTS.length);
   }, []);
@@ -122,11 +122,7 @@ export function ValentineSlide({ onAccept }: ValentineSlideProps) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     celebTextOpacity.value = withDelay(300, withTiming(1, { duration: 500 }));
-
-    timerRef.current = setTimeout(() => {
-      onAccept();
-    }, 2500);
-  }, [accepted, onAccept]);
+  }, [accepted]);
 
   return (
     <View style={styles.slide}>
@@ -140,25 +136,39 @@ export function ValentineSlide({ onAccept }: ValentineSlideProps) {
       )}
 
       {/* Minion GIF */}
-      <View style={styles.heartContainer}>
+      <View style={styles.gifFrame}>
         <Image
-          source={require('@/assets/images/onboarding/minion-minion-loves.gif')}
+          source={
+            accepted
+              ? require('@/assets/images/onboarding/yay.gif')
+              : require('@/assets/images/onboarding/minion-minion-loves.gif')
+          }
           style={styles.minionGif}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       </View>
 
-      {/* Title */}
-      <Text style={styles.title}>Will you be my Valentine?</Text>
+      {/* Title & Subtitle — hidden after accepting */}
+      {!accepted && (
+        <>
+          <Text style={styles.title}>Will you be my Valentine?</Text>
+          <Text style={styles.subtitle}>There's only one right answer...</Text>
+        </>
+      )}
 
-      {/* Subtitle */}
-      <Text style={styles.subtitle}>There's only one right answer...</Text>
-
-      {/* Celebration message */}
+      {/* Celebration message + Continue button */}
       {accepted && (
-        <Animated.Text style={[styles.celebrationText, celebTextStyle]}>
-          I love you pookie {'<3'}
-        </Animated.Text>
+        <>
+          <Animated.Text style={[styles.celebrationText, celebTextStyle]}>
+            I love you pookie {'<3'}
+          </Animated.Text>
+          <View style={styles.continueButtonWrapper}>
+            <Button title="Surprises" onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onAccept();
+            }} style={{ backgroundColor: '#2D3436' }} textStyle={{ color: '#FFFFFF' }} />
+          </View>
+        </>
       )}
 
       {/* Buttons */}
@@ -190,15 +200,27 @@ const styles = StyleSheet.create({
     width,
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: Spacing.lg,
+    paddingTop: height * 0.08,
   },
-  heartContainer: {
+  gifFrame: {
+    width: width * 0.75,
+    height: width * 0.75,
+    borderRadius: 24,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
     marginBottom: Spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
   },
   minionGif: {
-    width: 200,
-    height: 200,
+    width: '100%',
+    height: '100%',
   },
   title: {
     ...Typography.h1,
@@ -221,6 +243,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.lg,
   },
+  continueButtonWrapper: {
+    width: '100%',
+    marginTop: Spacing.xl,
+  },
   buttonsContainer: {
     alignItems: 'center',
     gap: Spacing.md,
@@ -228,7 +254,7 @@ const styles = StyleSheet.create({
     minHeight: 160,
   },
   yesButtonWrapper: {
-    width: '100%',
+    minWidth: 160,
   },
   yesButton: {
     backgroundColor: BrandColors.accent,
@@ -236,7 +262,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderRadius: 20,
     alignItems: 'center',
-    width: '100%',
   },
   yesText: {
     ...Typography.bodyBold,

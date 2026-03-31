@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Start authenticated – welcome screen is the entry point
   const [user, setUser] = useState<MockUser | null>(mockUser);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
   const login = useCallback(async (_email: string, _password: string) => {

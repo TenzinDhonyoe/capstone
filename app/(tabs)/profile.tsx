@@ -47,29 +47,6 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        {/* Device Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Device</Text>
-        </View>
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-          <View style={styles.deviceCard}>
-            <View style={styles.deviceIconContainer}>
-              <Ionicons name="bluetooth" size={24} color={secondaryText} />
-            </View>
-            <View style={styles.deviceInfo}>
-              <Text style={[styles.deviceTitle, { color: textColor }]}>
-                ECG Sensor
-              </Text>
-              <Text style={[styles.deviceStatus, { color: secondaryText }]}>
-                Not Connected
-              </Text>
-            </View>
-            <View style={styles.deviceBadge}>
-              <Text style={styles.deviceBadgeText}>Setup</Text>
-            </View>
-          </View>
-        </View>
-
         {/* Notifications */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: textColor }]}>
@@ -235,40 +212,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
-  },
-  deviceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm + 2,
-  },
-  deviceIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.md,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deviceInfo: {
-    flex: 1,
-  },
-  deviceTitle: {
-    ...Typography.bodyBold,
-  },
-  deviceStatus: {
-    ...Typography.caption,
-  },
-  deviceBadge: {
-    backgroundColor: BrandColors.orange,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    borderRadius: BorderRadius.full,
-  },
-  deviceBadgeText: {
-    ...Typography.caption,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
   signOutSection: {
     marginTop: Spacing.xl,

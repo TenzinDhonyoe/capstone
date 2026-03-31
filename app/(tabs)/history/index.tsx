@@ -63,7 +63,7 @@ export default function HistoryListScreen() {
       </Text>
       <Text style={[styles.emptyMessage, { color: secondaryText }]}>
         {activeFilter === 'all'
-          ? 'Start your first ECG recording to see it here.'
+          ? 'Start your first recording to see it here.'
           : `No ${activeFilter} recordings found.`}
       </Text>
     </View>

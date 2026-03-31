@@ -4,23 +4,18 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { ECGWaveform } from '@/components/ecg-waveform';
 import { MetricCard } from '@/components/metric-card';
 import { AlertBanner } from '@/components/alert-banner';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { mockRecordings } from '@/data/mock-recordings';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const WAVEFORM_WIDTH = SCREEN_WIDTH - Spacing.md * 2;
 
 export default function RecordingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -63,13 +58,6 @@ export default function RecordingDetailScreen() {
             <Text style={[styles.time, { color: secondaryText }]}>{recording.time}</Text>
           </View>
         </View>
-
-        {/* ECG Strip */}
-        <ECGWaveform
-          width={WAVEFORM_WIDTH}
-          height={180}
-          isAnimating={false}
-        />
 
         {/* Metrics Grid */}
         <View style={styles.metricsGrid}>

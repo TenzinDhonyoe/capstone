@@ -56,20 +56,20 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Start Recording Card */}
+        {/* Quick Action Card */}
         <TouchableOpacity
           style={styles.startRecordingCard}
           activeOpacity={0.85}
-          onPress={() => router.push('/(tabs)/ecg-monitor')}
+          onPress={() => router.push('/(tabs)/history')}
         >
           <View style={styles.startRecordingContent}>
             <View style={styles.startRecordingIcon}>
-              <Ionicons name="pulse" size={28} color="#FFFFFF" />
+              <Ionicons name="heart" size={28} color="#FFFFFF" />
             </View>
             <View style={styles.startRecordingText}>
-              <Text style={styles.startRecordingTitle}>Start Recording</Text>
+              <Text style={styles.startRecordingTitle}>View History</Text>
               <Text style={styles.startRecordingSubtitle}>
-                Begin a new ECG recording session
+                Check your recent health recordings
               </Text>
             </View>
             <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />

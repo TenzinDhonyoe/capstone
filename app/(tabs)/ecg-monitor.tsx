@@ -29,6 +29,7 @@ import {
   type ECGMetrics,
 } from '@/data/mock-ecg-metrics';
 import { useBLE, useECGStream } from '@/hooks/use-ble';
+import { analyzeECGBuffer } from '@/services/ecg-analysis';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -53,6 +54,21 @@ export default function ECGMonitorScreen() {
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
 
+  // Update metrics from real ECG data when connected
+  useEffect(() => {
+    if (!isConnected || ecgDataBuffer.length === 0) return;
+
+    const result = analyzeECGBuffer(ecgDataBuffer);
+    if (result) {
+      setMetrics((prev) => ({
+        ...prev,
+        heartRate: result.heartRate || prev.heartRate,
+        hrv: result.hrv,
+        signalQuality: result.signalQuality,
+      }));
+    }
+  }, [isConnected, ecgDataBuffer]);
+
   const startRecording = useCallback(() => {
     setIsRecording(true);
     setElapsedSeconds(0);
@@ -61,10 +77,13 @@ export default function ECGMonitorScreen() {
       setElapsedSeconds((prev) => prev + 1);
     }, 1000);
 
-    metricsRef.current = setInterval(() => {
-      setMetrics((prev) => getVariedMetrics(prev));
-    }, 2500);
-  }, []);
+    // Only use mock metrics when not connected to a real device
+    if (!isConnected) {
+      metricsRef.current = setInterval(() => {
+        setMetrics((prev) => getVariedMetrics(prev));
+      }, 2500);
+    }
+  }, [isConnected]);
 
   const stopRecording = useCallback(() => {
     setIsRecording(false);

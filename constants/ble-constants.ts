@@ -29,6 +29,8 @@ export const BLE_CONFIG = {
     // Data configuration
     SAMPLE_RATE: 250, // Hz - samples per second from ESP32
     BUFFER_SIZE: 2500, // Store ~10 seconds of data
+    SAMPLE_GAIN: 2048, // Convert raw int16 samples to render-friendly normalized values
+    SAMPLE_OFFSET: 0, // Raw ADC baseline offset (adjust if your ESP32 has DC bias)
 } as const;
 
 // Connection status types

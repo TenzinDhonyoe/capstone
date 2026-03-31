@@ -10,11 +10,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/auth-context';
 
 const { height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { completeOnboarding } = useAuth();
 
   return (
     <ImageBackground
@@ -50,7 +52,12 @@ export default function WelcomeScreen() {
       <View style={styles.buttonWrapper}>
         <Button
           title="Get Started"
-          onPress={() => router.push('/(onboarding)/slides')}
+          onPress={() => {
+            completeOnboarding();
+            router.replace('/(tabs)');
+          }}
+          style={{ backgroundColor: '#2D3436' }}
+          textStyle={{ color: '#FFFFFF' }}
         />
       </View>
     </ImageBackground>
