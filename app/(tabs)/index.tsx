@@ -10,12 +10,14 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/contexts/auth-context';
+import { useBLE, useECGStream } from '@/hooks/use-ble';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { MetricCard } from '@/components/metric-card';
 import { RecordingCard } from '@/components/recording-card';
 import { AlertBanner } from '@/components/alert-banner';
-import { BrandColors, Spacing, Typography, BorderRadius } from '@/constants/theme';
+import { BrandColors, Spacing, Typography, BorderRadius, StatusColors } from '@/constants/theme';
 import { mockRecordings } from '@/data/mock-recordings';
+import { analyzeECGBuffer } from '@/services/ecg-analysis';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -27,13 +29,25 @@ function getGreeting(): string {
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const { isConnected, connectedDevice, connectionStatus } = useBLE();
+  const { ecgDataBuffer } = useECGStream();
 
   const bg = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const secondaryText = useThemeColor({}, 'textSecondary');
+  const cardBg = useThemeColor({}, 'card');
+  const cardBorder = useThemeColor({}, 'cardBorder');
 
   const recentRecordings = mockRecordings.slice(0, 3);
   const latestPathology = mockRecordings.find((r) => r.hasPathology);
+
+  // Get real metrics when connected
+  const realMetrics = isConnected && ecgDataBuffer.length > 0
+    ? analyzeECGBuffer(ecgDataBuffer)
+    : null;
+
+  const currentHR = realMetrics?.heartRate ?? mockRecordings[0]?.bpm ?? 72;
+  const currentHRV = realMetrics?.hrv ?? mockRecordings[0]?.hrv ?? 48;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
@@ -56,25 +70,60 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Quick Action Card */}
-        <TouchableOpacity
-          style={styles.startRecordingCard}
-          activeOpacity={0.85}
-          onPress={() => router.push('/(tabs)/history')}
-        >
-          <View style={styles.startRecordingContent}>
-            <View style={styles.startRecordingIcon}>
-              <Ionicons name="heart" size={28} color="#FFFFFF" />
+        {/* Device Status Card */}
+        {isConnected ? (
+          <View style={styles.deviceCardConnected}>
+            <View style={styles.deviceCardContent}>
+              <View style={styles.deviceCardLeft}>
+                <View style={styles.connectedDot} />
+                <View>
+                  <Text style={styles.deviceCardTitle}>
+                    {connectedDevice?.name ?? 'SOWA Sensor'}
+                  </Text>
+                  <Text style={styles.deviceCardSubtitle}>Connected</Text>
+                </View>
+              </View>
+              <View style={styles.liveHR}>
+                <Ionicons name="heart" size={20} color="#FFFFFF" />
+                <Text style={styles.liveHRValue}>{currentHR}</Text>
+                <Text style={styles.liveHRUnit}>BPM</Text>
+              </View>
             </View>
-            <View style={styles.startRecordingText}>
-              <Text style={styles.startRecordingTitle}>View History</Text>
-              <Text style={styles.startRecordingSubtitle}>
-                Check your recent health recordings
-              </Text>
-            </View>
-            <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+            <TouchableOpacity
+              style={styles.deviceCardAction}
+              onPress={() => router.push('/(tabs)/ecg-monitor')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.deviceCardActionText}>Open ECG Monitor</Text>
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.deviceCardDisconnected, { backgroundColor: cardBg, borderColor: cardBorder }]}
+            activeOpacity={0.85}
+            onPress={() => router.push('/(tabs)/ecg-monitor')}
+          >
+            <View style={styles.deviceCardContent}>
+              <View style={styles.deviceCardIconContainer}>
+                <Ionicons name="bluetooth-outline" size={28} color={StatusColors.blue} />
+              </View>
+              <View style={styles.deviceCardTextContainer}>
+                <Text style={[styles.deviceCardTitle, { color: textColor }]}>
+                  {connectionStatus === 'reconnecting'
+                    ? 'Reconnecting...'
+                    : 'Connect Your Sensor'}
+                </Text>
+                <Text style={[styles.deviceCardSubtitleDisconnected, { color: secondaryText }]}>
+                  {connectionStatus === 'reconnecting'
+                    ? 'Trying to reach your SOWA sensor'
+                    : 'Tap to connect your SOWA ECG sensor'}
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward" size={24} color={secondaryText} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Metrics Row */}
         <View style={styles.sectionHeader}>
@@ -89,14 +138,14 @@ export default function DashboardScreen() {
         >
           <MetricCard
             title="Heart Rate"
-            value={mockRecordings[0]?.bpm ?? 72}
+            value={currentHR}
             unit="BPM"
             trend="stable"
             status="optimal"
           />
           <MetricCard
             title="HRV"
-            value={mockRecordings[0]?.hrv ?? 48}
+            value={currentHRV}
             unit="ms"
             trend="up"
             status="normal"
@@ -186,35 +235,89 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  startRecordingCard: {
+  // Connected device card
+  deviceCardConnected: {
     backgroundColor: BrandColors.accent,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     marginBottom: Spacing.lg,
+    gap: Spacing.sm,
   },
-  startRecordingContent: {
+  deviceCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    justifyContent: 'space-between',
   },
-  startRecordingIcon: {
+  deviceCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  connectedDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4ADE80',
+  },
+  deviceCardTitle: {
+    ...Typography.bodyBold,
+    color: '#FFFFFF',
+  },
+  deviceCardSubtitle: {
+    ...Typography.small,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  liveHR: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  liveHRValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  liveHRUnit: {
+    ...Typography.caption,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  deviceCardAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  deviceCardActionText: {
+    ...Typography.bodyBold,
+    color: '#FFFFFF',
+  },
+  // Disconnected device card
+  deviceCardDisconnected: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  deviceCardIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: StatusColors.blue + '15',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  startRecordingText: {
+  deviceCardTextContainer: {
     flex: 1,
+    marginLeft: Spacing.sm,
+    marginRight: Spacing.sm,
   },
-  startRecordingTitle: {
-    ...Typography.h3,
-    color: '#FFFFFF',
-  },
-  startRecordingSubtitle: {
+  deviceCardSubtitleDisconnected: {
     ...Typography.caption,
-    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
   },
   sectionHeader: {
     flexDirection: 'row',

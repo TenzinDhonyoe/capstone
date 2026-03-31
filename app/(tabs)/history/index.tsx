@@ -137,7 +137,9 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.sm + 2,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: BorderRadius.full,
     borderWidth: 1,
   },

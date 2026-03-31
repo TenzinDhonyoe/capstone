@@ -1,4 +1,8 @@
+'use no memo';
+
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
@@ -14,14 +18,14 @@ import { AlertBanner } from '@/components/alert-banner';
 import { BLEConnectionStatus } from '@/components/ble-connection-status';
 import { BLEDeviceList } from '@/components/ble-device-list';
 import { ECGWaveform } from '@/components/ecg-waveform';
-import { MetricCard } from '@/components/metric-card';
 import { SignalQualityBar } from '@/components/signal-quality-bar';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
+  BrandColors,
   BorderRadius,
   Spacing,
   StatusColors,
-  Typography
+  Typography,
 } from '@/constants/theme';
 import {
   defaultECGMetrics,
@@ -29,23 +33,28 @@ import {
   type ECGMetrics,
 } from '@/data/mock-ecg-metrics';
 import { useBLE, useECGStream } from '@/hooks/use-ble';
-import { analyzeECGBuffer } from '@/services/ecg-analysis';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { analyzeECGBuffer } from '@/services/ecg-analysis';
+import { saveRecording, type SavedRecording } from '@/services/recording-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WAVEFORM_WIDTH = SCREEN_WIDTH - Spacing.md * 2;
 const WAVEFORM_HEIGHT = 220;
 
 export default function ECGMonitorScreen() {
+  const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
   const [metrics, setMetrics] = useState<ECGMetrics>(defaultECGMetrics);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showDeviceList, setShowDeviceList] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [savedBanner, setSavedBanner] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const metricsRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingStartTime = useRef<Date | null>(null);
 
   // BLE state
-  const { isConnected, signalQuality: bleSignalQuality, requestPermissions } = useBLE();
+  const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions } = useBLE();
   const { ecgDataBuffer } = useECGStream();
 
   const bg = useThemeColor({}, 'background');
@@ -53,6 +62,7 @@ export default function ECGMonitorScreen() {
   const secondaryText = useThemeColor({}, 'textSecondary');
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
+  const buttonBg = useThemeColor({}, 'buttonBackground');
 
   // Update metrics from real ECG data when connected
   useEffect(() => {
@@ -72,6 +82,8 @@ export default function ECGMonitorScreen() {
   const startRecording = useCallback(() => {
     setIsRecording(true);
     setElapsedSeconds(0);
+    setSavedBanner(null);
+    recordingStartTime.current = new Date();
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
@@ -85,13 +97,42 @@ export default function ECGMonitorScreen() {
     }
   }, [isConnected]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
     if (metricsRef.current) clearInterval(metricsRef.current);
     timerRef.current = null;
     metricsRef.current = null;
-  }, []);
+
+    // Save recording
+    const now = recordingStartTime.current ?? new Date();
+    const id = `rec-${Date.now()}`;
+    const mins = Math.floor(elapsedSeconds / 60);
+    const secs = elapsedSeconds % 60;
+
+    const recording: SavedRecording = {
+      id,
+      date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      duration: `${mins}:${secs.toString().padStart(2, '0')}`,
+      bpm: metrics.heartRate,
+      hrv: metrics.hrv,
+      condition: metrics.rhythm,
+      status: metrics.rhythm === 'Normal Sinus Rhythm' ? 'optimal' : 'warning',
+      hasPathology: metrics.rhythm !== 'Normal Sinus Rhythm',
+      pathologyNote: metrics.rhythm !== 'Normal Sinus Rhythm'
+        ? `Detected: ${metrics.rhythm}`
+        : '',
+      sampleCount: ecgDataBuffer.length,
+    };
+
+    await saveRecording(recording);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSavedBanner(id);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => setSavedBanner(null), 5000);
+  }, [elapsedSeconds, metrics, ecgDataBuffer.length]);
 
   useEffect(() => {
     return () => {
@@ -106,6 +147,8 @@ export default function ECGMonitorScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const heartRateStatus = metrics.heartRate > 100 || metrics.heartRate < 50 ? 'warning' : 'optimal';
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
       <ScrollView
@@ -117,7 +160,7 @@ export default function ECGMonitorScreen() {
           <Text style={[styles.title, { color: textColor }]}>ECG Monitor</Text>
           <View style={styles.headerRight}>
             {isRecording && (
-              <View style={styles.liveIndicator}>
+              <View style={[styles.liveIndicator, { backgroundColor: StatusColors.red + '15' }]}>
                 <View style={styles.liveDot} />
                 <Text style={styles.liveText}>LIVE</Text>
               </View>
@@ -132,8 +175,24 @@ export default function ECGMonitorScreen() {
           </View>
         </View>
 
+        {/* Saved Banner */}
+        {savedBanner && (
+          <TouchableOpacity
+            style={styles.savedBanner}
+            onPress={() => {
+              setSavedBanner(null);
+              router.push(`/(tabs)/history/${savedBanner}`);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+            <Text style={styles.savedBannerText}>Recording saved!</Text>
+            <Text style={styles.savedBannerAction}>View</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Connection Banner - show when not connected */}
-        {!isConnected && (
+        {!isConnected && !isRecording && (
           <TouchableOpacity
             style={[styles.connectionBanner, { backgroundColor: cardBg, borderColor: cardBorder }]}
             onPress={() => {
@@ -141,97 +200,97 @@ export default function ECGMonitorScreen() {
               setShowDeviceList(true);
             }}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Connect your ECG sensor to start monitoring"
           >
             <Ionicons name="bluetooth-outline" size={20} color={StatusColors.blue} />
             <Text style={[styles.connectionBannerText, { color: textColor }]}>
-              Connect your ECG sensor to start monitoring
+              {connectionStatus === 'reconnecting'
+                ? 'Reconnecting to your sensor...'
+                : 'Connect your ECG sensor to start monitoring'}
             </Text>
             <Ionicons name="chevron-forward" size={18} color={secondaryText} />
           </TouchableOpacity>
         )}
 
         {/* ECG Waveform */}
-        <ECGWaveform
-          width={WAVEFORM_WIDTH}
-          height={WAVEFORM_HEIGHT}
-          isAnimating={isRecording}
-          staticData={isConnected && ecgDataBuffer.length > 0 ? ecgDataBuffer : undefined}
-        />
-
-        {/* Signal Quality */}
-        <View style={styles.section}>
-          <SignalQualityBar quality={isConnected ? bleSignalQuality : metrics.signalQuality} />
+        <View accessibilityLabel={`ECG waveform, current heart rate ${metrics.heartRate} BPM`}>
+          <ECGWaveform
+            width={WAVEFORM_WIDTH}
+            height={WAVEFORM_HEIGHT}
+            isAnimating={isRecording || (isConnected && ecgDataBuffer.length > 0)}
+            staticData={isConnected && ecgDataBuffer.length > 0 ? ecgDataBuffer : undefined}
+          />
         </View>
 
-        {/* Metrics Grid */}
-        <View style={styles.metricsGrid}>
-          <View style={styles.metricsRow}>
-            <View style={styles.metricItem}>
-              <MetricCard
-                title="Heart Rate"
-                value={metrics.heartRate}
-                unit="BPM"
-                status={
-                  metrics.heartRate > 100
-                    ? 'warning'
-                    : metrics.heartRate < 50
-                      ? 'warning'
-                      : 'optimal'
-                }
-                compact
-              />
-            </View>
-            <View style={styles.metricItem}>
-              <MetricCard
-                title="HRV"
-                value={metrics.hrv}
-                unit="ms"
-                status={metrics.hrv < 30 ? 'warning' : 'normal'}
-                compact
-              />
-            </View>
-            <View style={styles.metricItem}>
-              <MetricCard
-                title="PR Interval"
-                value={metrics.prInterval}
-                unit="ms"
-                compact
-              />
-            </View>
+        {/* HERO: Heart Rate */}
+        <View style={styles.heroMetric}>
+          <View style={styles.heroRow}>
+            <Ionicons
+              name="heart"
+              size={28}
+              color={heartRateStatus === 'optimal' ? StatusColors.green : StatusColors.red}
+            />
+            <Text style={[styles.heroValue, { color: textColor }]}>
+              {isConnected || isRecording ? metrics.heartRate : '--'}
+            </Text>
+            <Text style={[styles.heroUnit, { color: secondaryText }]}>BPM</Text>
           </View>
-          <View style={styles.metricsRow}>
-            <View style={styles.metricItem}>
-              <MetricCard
-                title="QT Interval"
-                value={metrics.qtInterval}
-                unit="ms"
-                compact
-              />
-            </View>
-            <View style={styles.rhythmCard}>
-              <View
-                style={[
-                  styles.rhythmContainer,
-                  { backgroundColor: cardBg, borderColor: cardBorder },
-                ]}
-              >
-                <Text style={[styles.rhythmLabel, { color: secondaryText }]}>
-                  Rhythm
-                </Text>
-                <Text style={[styles.rhythmValue, { color: textColor }]}>
-                  {metrics.rhythm}
-                </Text>
-                <StatusBadge
-                  status={
-                    metrics.rhythm === 'Normal Sinus Rhythm'
-                      ? 'optimal'
-                      : 'warning'
-                  }
-                />
-              </View>
-            </View>
+          {(isConnected || isRecording) && (
+            <StatusBadge
+              status={heartRateStatus}
+            />
+          )}
+        </View>
+
+        {/* Signal Quality + Rhythm Row */}
+        <View style={styles.statusRow}>
+          <View style={styles.statusItem}>
+            <SignalQualityBar quality={isConnected ? bleSignalQuality : metrics.signalQuality} />
+          </View>
+          <View style={[styles.rhythmBadge, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+            <Text style={[styles.rhythmLabel, { color: secondaryText }]}>Rhythm</Text>
+            <Text style={[styles.rhythmValue, { color: textColor }]} numberOfLines={1}>
+              {metrics.rhythm}
+            </Text>
           </View>
         </View>
+
+        {/* Expandable Detail Metrics */}
+        <TouchableOpacity
+          style={[styles.detailToggle, { borderColor: cardBorder }]}
+          onPress={() => setShowDetails(!showDetails)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.detailToggleText, { color: secondaryText }]}>
+            Detailed Metrics
+          </Text>
+          <Ionicons
+            name={showDetails ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={secondaryText}
+          />
+        </TouchableOpacity>
+
+        {showDetails && (
+          <View style={styles.detailGrid}>
+            <View style={[styles.detailCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+              <Text style={[styles.detailLabel, { color: secondaryText }]}>HRV</Text>
+              <Text style={[styles.detailValue, { color: textColor }]}>{metrics.hrv}</Text>
+              <Text style={[styles.detailUnit, { color: secondaryText }]}>ms</Text>
+            </View>
+            <View style={[styles.detailCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+              <Text style={[styles.detailLabel, { color: secondaryText }]}>PR Interval</Text>
+              <Text style={[styles.detailValue, { color: textColor }]}>{metrics.prInterval}</Text>
+              <Text style={[styles.detailUnit, { color: secondaryText }]}>ms</Text>
+            </View>
+            <View style={[styles.detailCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+              <Text style={[styles.detailLabel, { color: secondaryText }]}>QT Interval</Text>
+              <Text style={[styles.detailValue, { color: textColor }]}>{metrics.qtInterval}</Text>
+              <Text style={[styles.detailUnit, { color: secondaryText }]}>ms</Text>
+            </View>
+          </View>
+        )}
 
         {/* Pathology Alert */}
         {metrics.rhythm !== 'Normal Sinus Rhythm' && (
@@ -258,10 +317,14 @@ export default function ECGMonitorScreen() {
         <TouchableOpacity
           style={[
             styles.recordButton,
-            isRecording ? styles.stopButton : styles.startButton,
+            isRecording
+              ? styles.stopButton
+              : { backgroundColor: buttonBg },
           ]}
           onPress={isRecording ? stopRecording : startRecording}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={isRecording ? 'Stop recording' : 'Start recording'}
         >
           <Ionicons
             name={isRecording ? 'stop' : 'play'}
@@ -306,11 +369,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
+  savedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: StatusColors.green,
+    padding: Spacing.sm + 2,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
+  },
+  savedBannerText: {
+    ...Typography.bodyBold,
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  savedBannerAction: {
+    ...Typography.bodyBold,
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+  },
   connectionBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    padding: Spacing.sm,
+    padding: Spacing.sm + 2,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     marginBottom: Spacing.md,
@@ -323,7 +405,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFEBEE',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
@@ -340,35 +421,96 @@ const styles = StyleSheet.create({
     color: StatusColors.red,
     letterSpacing: 1,
   },
-  section: {
+  // Hero heart rate
+  heroMetric: {
+    alignItems: 'center',
     marginTop: Spacing.md,
-  },
-  metricsGrid: {
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  metricItem: {
-    flex: 1,
-  },
-  rhythmCard: {
-    flex: 2,
-  },
-  rhythmContainer: {
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    padding: Spacing.sm + 2,
     gap: Spacing.xs,
   },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.sm,
+  },
+  heroValue: {
+    fontSize: 56,
+    fontWeight: '700',
+    lineHeight: 64,
+    fontVariant: ['tabular-nums'],
+  },
+  heroUnit: {
+    fontSize: 20,
+    fontWeight: '500',
+    lineHeight: 28,
+  },
+  // Status row
+  statusRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    alignItems: 'center',
+  },
+  statusItem: {
+    flex: 1,
+  },
+  rhythmBadge: {
+    flex: 1,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.sm,
+  },
   rhythmLabel: {
-    ...Typography.caption,
+    ...Typography.small,
     fontWeight: '500',
   },
   rhythmValue: {
-    ...Typography.bodyBold,
+    ...Typography.caption,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  // Detail metrics
+  detailToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  detailToggleText: {
+    ...Typography.caption,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  detailGrid: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  detailCard: {
+    flex: 1,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.sm,
+    alignItems: 'center',
+    gap: 2,
+  },
+  detailLabel: {
+    ...Typography.small,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 28,
+    fontVariant: ['tabular-nums'],
+  },
+  detailUnit: {
+    ...Typography.small,
+  },
+  section: {
+    marginTop: Spacing.md,
   },
   timerContainer: {
     flexDirection: 'row',
@@ -390,9 +532,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     marginTop: Spacing.lg,
     gap: Spacing.sm,
-  },
-  startButton: {
-    backgroundColor: '#1C1C1E',
   },
   stopButton: {
     backgroundColor: StatusColors.red,

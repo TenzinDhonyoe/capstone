@@ -32,6 +32,7 @@ import {
     subscribeToECGData,
     waitForBluetoothPowerOn,
 } from '@/services/ble-manager';
+import { getLastDevice, saveLastDevice, clearLastDevice } from '@/services/device-storage';
 
 // Use generic Device type to avoid importing from react-native-ble-plx directly
 interface BLEDevice {
@@ -128,6 +129,22 @@ export function BLEProvider({ children }: BLEProviderProps) {
         bluetoothStateSubscription.current = waitForBluetoothPowerOn((isPoweredOn) => {
             setIsBluetoothEnabled(isPoweredOn);
         });
+
+        // Auto-connect to last known device
+        const tryAutoConnect = async () => {
+            const lastDeviceId = await getLastDevice();
+            if (lastDeviceId) {
+                const granted = await requestBLEPermissions();
+                if (granted) {
+                    setPermissionsGranted(true);
+                    // Small delay to let BLE state settle
+                    setTimeout(() => {
+                        handleConnectToDevice(lastDeviceId);
+                    }, 1500);
+                }
+            }
+        };
+        tryAutoConnect();
 
         return () => {
             cleanup();
@@ -278,6 +295,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
             setConnectionStatus('connected');
             reconnectAttempts.current = 0;
 
+            // Persist for auto-reconnect
+            saveLastDevice(deviceId);
+
             // Start monitoring for disconnection
             connectionMonitorSubscription.current = monitorDeviceConnection(
                 deviceId,
@@ -353,6 +373,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
         setConnectionStatus('disconnected');
         setEcgDataBuffer([]);
         reconnectAttempts.current = 0;
+
+        // Clear stored device on manual disconnect
+        clearLastDevice();
     }, [connectedDevice]);
 
     // Clear error
