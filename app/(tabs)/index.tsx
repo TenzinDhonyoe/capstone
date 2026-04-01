@@ -181,8 +181,16 @@ export default function DashboardScreen() {
         {latestPathology ? (
           <AlertBanner
             type="warning"
-            title={latestPathology.condition}
-            message={latestPathology.pathologyNote}
+            title={
+              (latestPathology.pvcCount ?? 0) > 0 || (latestPathology.pacCount ?? 0) > 0
+                ? 'Pathology Detected'
+                : latestPathology.condition
+            }
+            message={
+              (latestPathology.pvcCount ?? 0) > 0 || (latestPathology.pacCount ?? 0) > 0
+                ? `Last recording: ${latestPathology.pvcCount ?? 0} PVCs, ${latestPathology.pacCount ?? 0} PACs detected by AI`
+                : latestPathology.pathologyNote
+            }
           />
         ) : (
           <AlertBanner

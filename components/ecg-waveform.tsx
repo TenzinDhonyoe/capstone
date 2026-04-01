@@ -5,16 +5,24 @@ import {
   Path,
   Skia,
   Line,
+  Circle,
   vec,
 } from '@shopify/react-native-skia';
 
 import { ecgSignalBuffer, SAMPLE_RATE } from '@/data/mock-ecg-signal';
+
+export interface WaveformAnnotation {
+  sampleIndex: number;  // index into the data buffer
+  color: string;        // e.g. '#4CAF50' green, '#FF9800' amber, '#FF5722' orange
+  size?: number;        // dot radius, default 4
+}
 
 interface ECGWaveformProps {
   width: number;
   height: number;
   isAnimating?: boolean;
   staticData?: number[];
+  annotations?: WaveformAnnotation[];
 }
 
 const VISIBLE_SECONDS = 2.5;
@@ -26,6 +34,7 @@ export function ECGWaveform({
   height,
   isAnimating = true,
   staticData,
+  annotations,
 }: ECGWaveformProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -135,6 +144,36 @@ export function ECGWaveform({
             strokeCap="round"
           />
         )}
+        {/* Beat classification annotations */}
+        {data && annotations && annotations.map((annotation, idx) => {
+          const startOffset = isAnimating ? offset : 0;
+          // Map sampleIndex to visible position
+          const relativeIndex = annotation.sampleIndex - startOffset;
+          // Handle wrap-around for circular buffer
+          const wrappedIndex = relativeIndex >= 0
+            ? relativeIndex
+            : relativeIndex + data.length;
+
+          // Only render if within visible window
+          if (wrappedIndex < 0 || wrappedIndex >= visiblePoints) return null;
+
+          const x = wrappedIndex * pointSpacing;
+          const dataIndex = annotation.sampleIndex % data.length;
+          const baseline = height * 0.55;
+          const amplitude = height * 0.4;
+          const y = baseline - data[dataIndex] * amplitude;
+          const dotSize = annotation.size ?? 4;
+
+          return (
+            <Circle
+              key={`ann-${idx}`}
+              cx={x}
+              cy={y}
+              r={dotSize}
+              color={annotation.color}
+            />
+          );
+        })}
       </Canvas>
       {isWaiting && (
         <View style={styles.waitingOverlay}>

@@ -111,7 +111,7 @@ export function analyzeECGBuffer(samples: number[]): ECGMetrics | null {
  * Detect R-peaks using a simple threshold + refractory period approach.
  * Works well for clean ECG signals from hardware like AD8232.
  */
-function detectRPeaks(samples: number[]): number[] {
+export function detectRPeaks(samples: number[]): number[] {
   if (samples.length < SAMPLE_RATE) return [];
 
   // Compute signal statistics for adaptive threshold
@@ -332,7 +332,7 @@ function detectRespiratoryPattern(rrIntervals: number[]): boolean {
  * Estimate signal quality (0-100) based on signal variance and noise.
  * A flat line or extremely noisy signal scores low.
  */
-function estimateSignalQuality(samples: number[]): number {
+export function estimateSignalQuality(samples: number[]): number {
   if (samples.length < SAMPLE_RATE) return 0;
 
   let sum = 0;

@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { BLEProvider } from '@/contexts/ble-context';
+import { MLProvider } from '@/contexts/ml-context';
 import { AppThemeProvider, useAppTheme } from '@/contexts/theme-context';
 
 SplashScreen.preventAutoHideAsync();
@@ -70,9 +71,11 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <BLEProvider>
-        <AppThemeProvider>
-          <RootNavigator />
-        </AppThemeProvider>
+        <MLProvider>
+          <AppThemeProvider>
+            <RootNavigator />
+          </AppThemeProvider>
+        </MLProvider>
       </BLEProvider>
     </AuthProvider>
   );

@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AlertBanner } from '@/components/alert-banner';
 import { BLEConnectionStatus } from '@/components/ble-connection-status';
 import { BLEDeviceList } from '@/components/ble-device-list';
-import { ECGWaveform } from '@/components/ecg-waveform';
+import { ECGWaveform, type WaveformAnnotation } from '@/components/ecg-waveform';
 import { SignalQualityBar } from '@/components/signal-quality-bar';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
@@ -28,6 +28,9 @@ import {
   Typography,
 } from '@/constants/theme';
 import { type ECGMetrics, initialECGMetrics, analyzeECGBuffer } from '@/services/ecg-analysis';
+import { useML } from '@/contexts/ml-context';
+import { getDisplayLabel } from '@/services/ml-types';
+import type { BeatClassification } from '@/services/ml-types';
 import { useBLE, useECGStream } from '@/hooks/use-ble';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { saveRecording, saveRawSamples, type SavedRecording } from '@/services/recording-storage';
@@ -56,6 +59,33 @@ export default function ECGMonitorScreen() {
   // BLE state
   const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions } = useBLE();
   const { ecgDataBuffer } = useECGStream();
+
+  // ML state
+  const {
+    modelStatus,
+    isMLEnabled,
+    classifications,
+    summary,
+    patternAlert,
+    signalQualityOk,
+  } = useML();
+
+  // Build waveform annotations from recent classifications
+  const waveformAnnotations: WaveformAnnotation[] = isConnected && isMLEnabled
+    ? classifications
+        .filter((c) => c.confidenceTier === 'high')
+        .slice(-20) // only show last 20 annotations for performance
+        .map((c) => ({
+          sampleIndex: c.sampleIndex,
+          color: c.label === 'N' ? '#4CAF50' : c.label === 'PVC' ? '#FF9800' : '#FF5722',
+          size: c.label === 'N' ? 3 : 5,
+        }))
+    : [];
+
+  // Get the latest classification for display
+  const latestClassification = classifications.length > 0
+    ? classifications[classifications.length - 1]
+    : null;
 
   const bg = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
@@ -147,11 +177,17 @@ export default function ECGMonitorScreen() {
       rhythm: currentMetrics.rhythm,
       condition: currentMetrics.rhythm,
       status: currentMetrics.rhythm === 'Normal Sinus Rhythm' ? 'optimal' : 'warning',
-      hasPathology: currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...',
-      pathologyNote: currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...'
-        ? `Detected: ${currentMetrics.rhythm}`
-        : '',
+      hasPathology: (currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...')
+        || summary.pvcCount > 0 || summary.pacCount > 0,
+      pathologyNote: summary.pvcCount > 0 || summary.pacCount > 0
+        ? `AI detected: ${summary.pvcCount} PVC, ${summary.pacCount} PAC`
+        : (currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...'
+          ? `Detected: ${currentMetrics.rhythm}`
+          : ''),
       sampleCount: recordingBufferRef.current.length,
+      pvcCount: summary.pvcCount,
+      pacCount: summary.pacCount,
+      totalClassifiedBeats: summary.totalBeats,
     };
 
     await saveRecording(recording);
@@ -257,6 +293,7 @@ export default function ECGMonitorScreen() {
             height={WAVEFORM_HEIGHT}
             isAnimating={isRecording || (isConnected && ecgDataBuffer.length > 0)}
             staticData={isConnected ? ecgDataBuffer : undefined}
+            annotations={waveformAnnotations}
           />
         </View>
 
@@ -279,6 +316,46 @@ export default function ECGMonitorScreen() {
             />
           )}
         </View>
+
+        {/* ML Classification Status */}
+        {isConnected && isMLEnabled && (
+          <View style={[styles.mlStatusContainer, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+            <View style={styles.mlStatusRow}>
+              <Ionicons
+                name="analytics-outline"
+                size={18}
+                color={
+                  modelStatus === 'ready'
+                    ? (latestClassification?.label === 'N' || !latestClassification
+                        ? StatusColors.green
+                        : '#FF9800')
+                    : secondaryText
+                }
+              />
+              <Text style={[styles.mlStatusText, { color: textColor }]}>
+                {modelStatus === 'loading' && 'AI analysis loading...'}
+                {modelStatus === 'error' && 'AI analysis unavailable'}
+                {modelStatus === 'ready' && !signalQualityOk && 'Signal too noisy for AI analysis'}
+                {modelStatus === 'ready' && signalQualityOk && !latestClassification && 'Analyzing beats...'}
+                {modelStatus === 'ready' && signalQualityOk && latestClassification &&
+                  getDisplayLabel(latestClassification)}
+              </Text>
+              {latestClassification && latestClassification.confidenceTier !== 'low' && (
+                <Text style={[styles.mlConfidence, { color: secondaryText }]}>
+                  {Math.round(latestClassification.confidence * 100)}%
+                </Text>
+              )}
+            </View>
+            {summary.totalBeats > 0 && (
+              <Text style={[styles.mlSummaryText, { color: secondaryText }]}>
+                Last 60s: {summary.normalCount} Normal
+                {summary.pvcCount > 0 ? `, ${summary.pvcCount} PVC` : ''}
+                {summary.pacCount > 0 ? `, ${summary.pacCount} PAC` : ''}
+                {summary.possiblePvcCount > 0 ? ` (+${summary.possiblePvcCount} possible)` : ''}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Signal Quality + Rhythm Row */}
         <View style={styles.statusRow}>
@@ -335,8 +412,17 @@ export default function ECGMonitorScreen() {
           </View>
         )}
 
-        {/* Pathology Alert */}
-        {isConnected && metrics.rhythm !== 'Normal Sinus Rhythm' && metrics.rhythm !== 'Analyzing...' && (
+        {/* Pathology Alert (ML pattern-based or rhythm-based) */}
+        {isConnected && patternAlert && (
+          <View style={styles.section}>
+            <AlertBanner
+              type={patternAlert.level === 'warning' ? 'warning' : 'info'}
+              title={patternAlert.title}
+              message={patternAlert.message}
+            />
+          </View>
+        )}
+        {isConnected && !patternAlert && metrics.rhythm !== 'Normal Sinus Rhythm' && metrics.rhythm !== 'Analyzing...' && (
           <View style={styles.section}>
             <AlertBanner
               type="warning"
@@ -354,6 +440,13 @@ export default function ECGMonitorScreen() {
               {formatTime(elapsedSeconds)}
             </Text>
           </View>
+        )}
+
+        {/* Medical Disclaimer */}
+        {isConnected && isMLEnabled && (
+          <Text style={[styles.disclaimer, { color: secondaryText }]}>
+            For educational purposes only. Not a medical diagnosis.
+          </Text>
         )}
 
         {/* Start/Stop Button */}
@@ -606,5 +699,37 @@ const styles = StyleSheet.create({
   recordButtonText: {
     ...Typography.bodyBold,
     color: '#FFFFFF',
+  },
+  // ML Classification styles
+  mlStatusContainer: {
+    marginTop: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.sm + 2,
+    gap: 4,
+  },
+  mlStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  mlStatusText: {
+    ...Typography.bodyBold,
+    flex: 1,
+  },
+  mlConfidence: {
+    ...Typography.small,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  mlSummaryText: {
+    ...Typography.small,
+    marginLeft: 26, // align with text after icon
+  },
+  disclaimer: {
+    ...Typography.small,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+    fontStyle: 'italic',
+    opacity: 0.7,
   },
 });

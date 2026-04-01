@@ -18,6 +18,10 @@ export interface SavedRecording {
   hasPathology: boolean;
   pathologyNote: string;
   sampleCount: number;
+  // ML classification data (optional for backwards compatibility)
+  pvcCount?: number;
+  pacCount?: number;
+  totalClassifiedBeats?: number;
 }
 
 export async function saveRecording(recording: SavedRecording): Promise<void> {
