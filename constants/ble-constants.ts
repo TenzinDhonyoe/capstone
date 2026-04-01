@@ -10,6 +10,7 @@ export const BLE_CONFIG = {
     // TODO: Replace with actual UUIDs from your ESP32 firmware
     ESP32_SERVICE_UUID: '4fafc201-1fb5-459e-8fcc-c5c9c331914b',
     ECG_CHARACTERISTIC_UUID: 'beb5483e-36e1-4688-b7f5-ea07361b26a8',
+    CLASSIFICATION_CHARACTERISTIC_UUID: 'beb5483e-36e1-4688-b7f5-ea07361b26a9',
 
     // Device identification
     DEVICE_NAME_PREFIX: 'SOWA',

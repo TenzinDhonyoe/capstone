@@ -30,8 +30,10 @@ import {
     requestBLEPermissions,
     scanForDevices,
     subscribeToECGData,
+    subscribeToClassification,
     waitForBluetoothPowerOn,
 } from '@/services/ble-manager';
+import type { ClassificationPacket } from '@/services/ble-manager';
 import { getLastDevice, saveLastDevice, clearLastDevice } from '@/services/device-storage';
 
 // Use generic Device type to avoid importing from react-native-ble-plx directly
@@ -58,6 +60,9 @@ interface BLEContextType {
 
     // ECG data stream
     ecgDataBuffer: number[];
+
+    // ESP32 classification packets
+    lastClassification: ClassificationPacket | null;
 
     // Signal quality (based on connection RSSI)
     signalQuality: number;
@@ -97,6 +102,10 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
     // ECG data
     const [ecgDataBuffer, setEcgDataBuffer] = useState<number[]>([]);
+
+    // ESP32 classification
+    const [lastClassification, setLastClassification] = useState<ClassificationPacket | null>(null);
+    const classificationSubscription = useRef<{ remove: () => void } | null>(null);
 
     // Signal quality (0-100)
     const [signalQuality, setSignalQuality] = useState(0);
@@ -173,6 +182,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
         }
         if (ecgDataSubscription.current) {
             ecgDataSubscription.current.remove();
+        }
+        if (classificationSubscription.current) {
+            classificationSubscription.current.remove();
         }
         if (connectionMonitorSubscription.current) {
             connectionMonitorSubscription.current.remove();
@@ -321,6 +333,17 @@ export function BLEProvider({ children }: BLEProviderProps) {
                     console.error('ECG data error:', err);
                 }
             );
+
+            // Subscribe to ESP32 classification results
+            classificationSubscription.current = subscribeToClassification(
+                deviceId,
+                (packet) => {
+                    setLastClassification(packet);
+                },
+                (err) => {
+                    console.error('Classification data error:', err);
+                }
+            );
         } catch (err) {
             setError(err as BLEError);
             setConnectionStatus('disconnected');
@@ -333,6 +356,10 @@ export function BLEProvider({ children }: BLEProviderProps) {
         if (ecgDataSubscription.current) {
             ecgDataSubscription.current.remove();
             ecgDataSubscription.current = null;
+        }
+        if (classificationSubscription.current) {
+            classificationSubscription.current.remove();
+            classificationSubscription.current = null;
         }
 
         if (BLE_CONFIG.AUTO_RECONNECT && reconnectAttempts.current < BLE_CONFIG.RECONNECT_ATTEMPTS) {
@@ -360,6 +387,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
             ecgDataSubscription.current = null;
         }
 
+        if (classificationSubscription.current) {
+            classificationSubscription.current.remove();
+            classificationSubscription.current = null;
+        }
+
         if (connectionMonitorSubscription.current) {
             connectionMonitorSubscription.current.remove();
             connectionMonitorSubscription.current = null;
@@ -372,6 +404,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         setConnectedDevice(null);
         setConnectionStatus('disconnected');
         setEcgDataBuffer([]);
+        setLastClassification(null);
         reconnectAttempts.current = 0;
 
         // Clear stored device on manual disconnect
@@ -393,6 +426,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         connectedDevice,
         discoveredDevices,
         ecgDataBuffer,
+        lastClassification,
         signalQuality,
         error,
         requestPermissions,

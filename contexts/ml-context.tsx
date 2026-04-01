@@ -19,7 +19,7 @@ import {
 } from 'react';
 import { InteractionManager } from 'react-native';
 
-import { useECGStream } from '@/hooks/use-ble';
+import { useBLE } from '@/hooks/use-ble';
 import { estimateSignalQuality } from '@/services/ecg-analysis';
 import {
   classifyBuffer,
@@ -30,10 +30,12 @@ import {
 } from '@/services/ml-inference';
 import type {
   BeatClassification,
+  BeatLabel,
   ClassificationSummary,
   ModelStatus,
   PatternAlert,
 } from '@/services/ml-types';
+import { getConfidenceTier } from '@/services/ml-types';
 
 const CLASSIFICATION_INTERVAL_MS = 500;
 const SIGNAL_QUALITY_THRESHOLD = 50;
@@ -73,8 +75,10 @@ interface MLProviderProps {
   children: ReactNode;
 }
 
+const LABEL_MAP: BeatLabel[] = ['N', 'PVC', 'PAC'];
+
 export function MLProvider({ children }: MLProviderProps) {
-  const { ecgDataBuffer, isConnected } = useECGStream();
+  const { ecgDataBuffer, isConnected, lastClassification } = useBLE();
 
   const [modelStatus, setModelStatus] = useState<ModelStatus>('loading');
   const [isMLEnabled, setMLEnabled] = useState(true);
@@ -96,7 +100,37 @@ export function MLProvider({ children }: MLProviderProps) {
     });
   }, []);
 
-  // Classification loop on 500ms timer
+  // Ingest classification packets from ESP32 (takes priority over on-device ML)
+  useEffect(() => {
+    if (!lastClassification || !isConnected) return;
+
+    const { label, confidence, sampleIndex } = lastClassification;
+
+    // Skip if we already classified this peak
+    if (classifiedIndicesRef.current.has(sampleIndex)) return;
+    classifiedIndicesRef.current.add(sampleIndex);
+
+    const beatLabel = LABEL_MAP[label] ?? 'N';
+    const classification: BeatClassification = {
+      label: beatLabel,
+      confidence,
+      confidenceTier: getConfidenceTier(confidence),
+      sampleIndex,
+      timestamp: Date.now(),
+    };
+
+    const updated = [...classificationsRef.current, classification];
+    const trimmed = updated.length > MAX_CLASSIFICATIONS
+      ? updated.slice(-MAX_CLASSIFICATIONS)
+      : updated;
+
+    classificationsRef.current = trimmed;
+    setClassifications(trimmed);
+    setSummary(computeSummary(trimmed));
+    setPatternAlert(detectPatternAlert(trimmed));
+  }, [lastClassification, isConnected]);
+
+  // Classification loop on 500ms timer (fallback when ESP32 ML is not sending)
   useEffect(() => {
     if (!isConnected || !isMLEnabled || modelStatus === 'error' || modelStatus === 'loading') {
       return;

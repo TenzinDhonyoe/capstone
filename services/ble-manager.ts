@@ -306,6 +306,67 @@ export function subscribeToECGData(
     };
 }
 
+export interface ClassificationPacket {
+    label: 0 | 1 | 2;        // 0=Normal, 1=PVC, 2=PAC
+    confidence: number;       // 0.0 – 1.0
+    sampleIndex: number;
+    heartRate: number;        // BPM (float)
+}
+
+export function subscribeToClassification(
+    deviceId: string,
+    onData: (packet: ClassificationPacket) => void,
+    onError: (error: BLEError) => void
+): BLESubscription | null {
+    const manager = getBleManager();
+    if (!manager) {
+        onError(createBLEError('BLUETOOTH_DISABLED', 'BLE not available.'));
+        return null;
+    }
+
+    const transactionId = `classify-stream-${deviceId}-${Date.now()}`;
+
+    const subscription = manager.monitorCharacteristicForDevice(
+        deviceId,
+        BLE_CONFIG.ESP32_SERVICE_UUID,
+        BLE_CONFIG.CLASSIFICATION_CHARACTERISTIC_UUID,
+        (error, characteristic) => {
+            if (error) {
+                onError(mapBleError(error, 'UNKNOWN', 'Error while monitoring classification data'));
+                return;
+            }
+
+            if (!characteristic?.value) {
+                return;
+            }
+
+            const bytes = decodeBase64ToBytes(characteristic.value);
+            if (bytes.length < 8) return;
+
+            const label = bytes[0] as 0 | 1 | 2;
+            const confRaw = bytes[1] | (bytes[2] << 8);
+            const confidence = confRaw / 10000;
+            const sampleIndex = bytes[3] | (bytes[4] << 8);
+            const hrRaw = bytes[5] | (bytes[6] << 8);
+            const heartRate = hrRaw / 10;
+
+            onData({ label, confidence, sampleIndex, heartRate });
+        },
+        transactionId
+    );
+
+    return {
+        remove: () => {
+            try {
+                manager.cancelTransaction(transactionId);
+            } catch {
+                // noop
+            }
+            subscription.remove();
+        },
+    };
+}
+
 export function monitorDeviceConnection(
     deviceId: string,
     onDisconnect: () => void
