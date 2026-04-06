@@ -9,7 +9,8 @@ import {
   vec,
 } from '@shopify/react-native-skia';
 
-import { ecgSignalBuffer, SAMPLE_RATE } from '@/data/mock-ecg-signal';
+import { BLE_CONFIG } from '@/constants/ble-constants';
+import { ecgSignalBuffer, SAMPLE_RATE as MOCK_SAMPLE_RATE } from '@/data/mock-ecg-signal';
 
 export interface WaveformAnnotation {
   sampleIndex: number;  // index into the data buffer
@@ -25,7 +26,7 @@ interface ECGWaveformProps {
   annotations?: WaveformAnnotation[];
 }
 
-const VISIBLE_SECONDS = 2.5;
+const VISIBLE_SECONDS = 5.0;
 const GRID_SIZE = 20;
 const FPS = 30;
 
@@ -45,26 +46,31 @@ export function ECGWaveform({
   const waveColor = isDark ? '#4ADE80' : '#22C55E';
   const textColor = isDark ? '#666666' : '#999999';
 
-  const visiblePoints = Math.round(SAMPLE_RATE * VISIBLE_SECONDS);
+  // Use BLE sample rate for real data, mock sample rate for preview
+  const sampleRate = staticData ? BLE_CONFIG.SAMPLE_RATE : MOCK_SAMPLE_RATE;
+  const visiblePoints = Math.round(sampleRate * VISIBLE_SECONDS);
   const pointSpacing = width / visiblePoints;
-  const samplesPerTick = Math.round(SAMPLE_RATE / FPS);
+  const samplesPerTick = Math.round(sampleRate / FPS);
 
   // Determine data source:
-  // - staticData provided with data: use real data
+  // - staticData provided with data: use real BLE data (live mode)
   // - staticData provided but empty: show "waiting" state
   // - staticData undefined: use mock signal (disconnected preview)
   const isWaiting = staticData !== undefined && staticData.length === 0;
+  const isLive = staticData !== undefined && staticData.length > 0;
   const data = isWaiting ? null : (staticData ?? ecgSignalBuffer);
 
+  // Offset animation only for mock preview (disconnected).
+  // Live data always shows the buffer tail — no offset needed.
   useEffect(() => {
-    if (!isAnimating || !data || data.length === 0) return;
+    if (!isAnimating || isLive || !data || data.length === 0) return;
 
     const interval = setInterval(() => {
       setOffset((prev) => (prev + samplesPerTick) % data.length);
     }, 1000 / FPS);
 
     return () => clearInterval(interval);
-  }, [isAnimating, data?.length, samplesPerTick]);
+  }, [isAnimating, isLive, data?.length, samplesPerTick]);
 
   // Build the waveform path
   const waveformPath = useMemo(() => {
@@ -73,10 +79,18 @@ export function ECGWaveform({
     const path = Skia.Path.Make();
     const baseline = height * 0.55;
     const amplitude = height * 0.4;
-    const startOffset = isAnimating ? offset : 0;
 
-    for (let i = 0; i < visiblePoints; i++) {
-      const dataIndex = (startOffset + i) % data.length;
+    // Live: render the most recent visiblePoints samples (tail of buffer).
+    // Mock: scroll through buffer using animated offset.
+    const pointsToRender = Math.min(visiblePoints, data.length);
+    const startIndex = isLive
+      ? Math.max(0, data.length - visiblePoints)
+      : (isAnimating ? offset : 0);
+
+    for (let i = 0; i < pointsToRender; i++) {
+      const dataIndex = isLive
+        ? startIndex + i
+        : (startIndex + i) % data.length;
       const x = i * pointSpacing;
       const y = baseline - data[dataIndex] * amplitude;
 
@@ -87,7 +101,7 @@ export function ECGWaveform({
       }
     }
     return path;
-  }, [offset, isAnimating, height, width, data, visiblePoints, pointSpacing]);
+  }, [offset, isAnimating, isLive, height, width, data, visiblePoints, pointSpacing]);
 
   // Flat line path for waiting state
   const flatLinePath = useMemo(() => {
@@ -146,19 +160,26 @@ export function ECGWaveform({
         )}
         {/* Beat classification annotations */}
         {data && annotations && annotations.map((annotation, idx) => {
-          const startOffset = isAnimating ? offset : 0;
-          // Map sampleIndex to visible position
-          const relativeIndex = annotation.sampleIndex - startOffset;
-          // Handle wrap-around for circular buffer
-          const wrappedIndex = relativeIndex >= 0
-            ? relativeIndex
-            : relativeIndex + data.length;
+          const windowStart = isLive
+            ? Math.max(0, data.length - visiblePoints)
+            : (isAnimating ? offset : 0);
+
+          const relativeIndex = isLive
+            ? annotation.sampleIndex - windowStart
+            : (() => {
+                const rel = annotation.sampleIndex - windowStart;
+                return rel >= 0 ? rel : rel + data.length;
+              })();
 
           // Only render if within visible window
-          if (wrappedIndex < 0 || wrappedIndex >= visiblePoints) return null;
+          if (relativeIndex < 0 || relativeIndex >= Math.min(visiblePoints, data.length)) return null;
 
-          const x = wrappedIndex * pointSpacing;
-          const dataIndex = annotation.sampleIndex % data.length;
+          const x = relativeIndex * pointSpacing;
+          const dataIndex = isLive
+            ? annotation.sampleIndex
+            : annotation.sampleIndex % data.length;
+          if (dataIndex < 0 || dataIndex >= data.length) return null;
+
           const baseline = height * 0.55;
           const amplitude = height * 0.4;
           const y = baseline - data[dataIndex] * amplitude;

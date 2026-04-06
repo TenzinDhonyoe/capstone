@@ -40,6 +40,8 @@ import { getConfidenceTier } from '@/services/ml-types';
 const CLASSIFICATION_INTERVAL_MS = 500;
 const SIGNAL_QUALITY_THRESHOLD = 50;
 const MAX_CLASSIFICATIONS = 500; // ~8 minutes at 70bpm
+const HALF_WINDOW = 90; // R-peak detection delay in samples
+const ESP32_ACTIVE_TIMEOUT_MS = 2000; // suppress fallback if ESP32 sent classification within this window
 
 interface MLContextType {
   // Model state
@@ -91,7 +93,11 @@ export function MLProvider({ children }: MLProviderProps) {
   // We use a ref because this changes on every classification cycle
   // and we don't need re-renders from it.
   const classifiedIndicesRef = useRef<Set<number>>(new Set());
+  // Separate dedup set for ESP32 firmware indices (different namespace from buffer indices)
+  const esp32IndicesRef = useRef<Set<number>>(new Set());
   const classificationsRef = useRef<BeatClassification[]>([]);
+  const lastEsp32TimeRef = useRef(0);
+  const bufferLengthRef = useRef(0);
 
   // Load model on mount
   useEffect(() => {
@@ -100,22 +106,37 @@ export function MLProvider({ children }: MLProviderProps) {
     });
   }, []);
 
+  // Track buffer length in a ref so the ESP32 effect can read it without re-running on every buffer change
+  useEffect(() => {
+    bufferLengthRef.current = ecgDataBuffer.length;
+  }, [ecgDataBuffer]);
+
   // Ingest classification packets from ESP32 (takes priority over on-device ML)
   useEffect(() => {
     if (!lastClassification || !isConnected) return;
 
-    const { label, confidence, sampleIndex } = lastClassification;
+    const { label, confidence, sampleIndex: firmwareIndex } = lastClassification;
 
-    // Skip if we already classified this peak
-    if (classifiedIndicesRef.current.has(sampleIndex)) return;
-    classifiedIndicesRef.current.add(sampleIndex);
+    // Dedup using the firmware's own index namespace (separate from buffer indices)
+    if (esp32IndicesRef.current.has(firmwareIndex)) return;
+    esp32IndicesRef.current.add(firmwareIndex);
+
+    lastEsp32TimeRef.current = Date.now();
+
+    // Map firmware global counter to an approximate buffer index.
+    // The R-peak was detected HALF_WINDOW samples behind the current write position.
+    const bufferIndex = Math.max(0, bufferLengthRef.current - HALF_WINDOW);
+
+    // Also mark this buffer-relative index as classified so the fallback
+    // timer won't re-classify the same beat from the buffer.
+    classifiedIndicesRef.current.add(bufferIndex);
 
     const beatLabel = LABEL_MAP[label] ?? 'N';
     const classification: BeatClassification = {
       label: beatLabel,
       confidence,
       confidenceTier: getConfidenceTier(confidence),
-      sampleIndex,
+      sampleIndex: bufferIndex,
       timestamp: Date.now(),
     };
 
@@ -140,6 +161,9 @@ export function MLProvider({ children }: MLProviderProps) {
       // Use InteractionManager to avoid blocking animations
       InteractionManager.runAfterInteractions(() => {
         if (ecgDataBuffer.length < 250) return; // Need at least 1 second
+
+        // Skip if ESP32 is actively sending classifications
+        if (Date.now() - lastEsp32TimeRef.current < ESP32_ACTIVE_TIMEOUT_MS) return;
 
         // Check signal quality
         const quality = estimateSignalQuality(ecgDataBuffer);
@@ -183,6 +207,8 @@ export function MLProvider({ children }: MLProviderProps) {
   useEffect(() => {
     if (!isConnected) {
       classifiedIndicesRef.current.clear();
+      esp32IndicesRef.current.clear();
+      lastEsp32TimeRef.current = 0;
       classificationsRef.current = [];
       setClassifications([]);
       setSummary(emptySummary);
@@ -193,6 +219,8 @@ export function MLProvider({ children }: MLProviderProps) {
 
   const clearClassifications = useCallback(() => {
     classifiedIndicesRef.current.clear();
+    esp32IndicesRef.current.clear();
+    lastEsp32TimeRef.current = 0;
     classificationsRef.current = [];
     setClassifications([]);
     setSummary(emptySummary);

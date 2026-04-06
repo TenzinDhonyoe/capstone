@@ -21,11 +21,10 @@ import {
   getConfidenceTier,
 } from '@/services/ml-types';
 
-const SAMPLE_RATE = BLE_CONFIG.SAMPLE_RATE; // 250 Hz
+const SAMPLE_RATE = BLE_CONFIG.SAMPLE_RATE; // 360 Hz
 
-// Beat window: 90 samples before + 90 samples after R-peak at 250Hz
-// If resampling to 360Hz, this becomes 180 samples (the model's expected input)
-const HALF_WINDOW = 90; // samples at 250Hz (0.36s each side)
+// Beat window: 90 samples before + 90 samples after R-peak
+const HALF_WINDOW = 90;
 const BEAT_WINDOW_SIZE = HALF_WINDOW * 2; // 180 samples
 
 // Minimum buffer edge margin to extract a valid window
@@ -235,7 +234,7 @@ function classifyRuleBased(
 /** Approximate QRS width in samples by finding the main deflection span. */
 function measureQRSWidth(window: number[]): number {
   const mid = Math.floor(window.length / 2);
-  const searchRadius = 25; // ~100ms at 250Hz
+  const searchRadius = 36; // ~100ms at 360Hz
   let maxIdx = mid;
   let minIdx = mid;
 

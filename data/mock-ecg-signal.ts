@@ -3,7 +3,7 @@
  * Generates data at 250Hz sample rate.
  */
 
-const SAMPLE_RATE = 250;
+const SAMPLE_RATE = 360;
 const BEAT_DURATION = 0.8; // seconds per beat (~75 BPM)
 
 function gaussian(x: number, amplitude: number, center: number, width: number): number {

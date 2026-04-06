@@ -54,7 +54,7 @@ export default function ECGMonitorScreen() {
   const recordingBufferRef = useRef<number[]>([]);
   const lastBufferLengthRef = useRef(0);
   const metricsRef = useRef<ECGMetrics>(initialECGMetrics);
-  const MAX_RECORDING_SAMPLES = 250 * 60 * 30; // 30 minutes max
+  const MAX_RECORDING_SAMPLES = 360 * 60 * 30; // 30 minutes max
 
   // BLE state
   const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions } = useBLE();

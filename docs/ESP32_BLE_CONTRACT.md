@@ -59,23 +59,18 @@ normalized = (rawInt16 - SAMPLE_OFFSET) / SAMPLE_GAIN
 
 Default app config:
 
-- `SAMPLE_GAIN = 2048`
+- `SAMPLE_GAIN = 500`
 - `SAMPLE_OFFSET = 0`
 
-If your firmware has a DC baseline offset, adjust `SAMPLE_OFFSET`.
-If waveform amplitude is too large/small, tune `SAMPLE_GAIN`.
+Firmware centers at the 2.5V midrail bias (`analogReadMilliVolts() - 2500`),
+so `SAMPLE_OFFSET` stays 0. If waveform amplitude is too large/small, tune `SAMPLE_GAIN`.
 
 ## Packet Sizing Guidance
 
-For 250 Hz ECG:
+For 360 Hz ECG:
 
-- 250 samples/sec = 500 bytes/sec raw payload
-- Recommended notification payload sizes:
-  - 20 bytes (10 samples) for broad compatibility
-  - 40 bytes (20 samples) if stable on your target stack
-- Cadence examples:
-  - 10 samples/packet -> 25 packets/sec
-  - 20 samples/packet -> 12.5 packets/sec
+- 360 samples/sec = 720 bytes/sec raw payload
+- Firmware sends 40 bytes (20 samples) per notification → 18 packets/sec
 
 Keep cadence consistent to reduce jitter in UI rendering.
 

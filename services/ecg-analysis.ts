@@ -26,7 +26,7 @@ export const initialECGMetrics: ECGMetrics = {
   signalQuality: 0,
 };
 
-const SAMPLE_RATE = BLE_CONFIG.SAMPLE_RATE; // 250 Hz
+const SAMPLE_RATE = BLE_CONFIG.SAMPLE_RATE; // 360 Hz
 
 /**
  * Analyze an ECG sample buffer and return computed metrics.
@@ -347,9 +347,9 @@ export function estimateSignalQuality(samples: number[]): number {
   const stdDev = Math.sqrt(Math.max(0, variance));
 
   // A good ECG signal has moderate variance (not flat, not pure noise)
-  // Normalized signals from SAMPLE_GAIN=2048 typically have stdDev 0.05-0.5
+  // With SAMPLE_GAIN=500 and ~600x hardware gain, typical ECG stdDev is 0.2–1.5
   if (stdDev < 0.01) return 10;   // Flat line
-  if (stdDev > 2.0) return 20;    // Very noisy
+  if (stdDev > 5.0) return 20;    // Very noisy
 
   // Check for high-frequency noise by comparing adjacent sample differences
   let diffSum = 0;
