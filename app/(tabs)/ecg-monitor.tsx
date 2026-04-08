@@ -298,6 +298,25 @@ export default function ECGMonitorScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Debug: raw buffer stats */}
+        {isConnected && ecgDataBuffer.length > 0 && (() => {
+          const last100 = ecgDataBuffer.slice(-100);
+          const min = Math.min(...last100);
+          const max = Math.max(...last100);
+          const mean = last100.reduce((a, b) => a + b, 0) / last100.length;
+          const last5 = ecgDataBuffer.slice(-5).map(v => v.toFixed(2)).join(', ');
+          return (
+            <View style={{ backgroundColor: '#000', padding: 8, borderRadius: 8, marginBottom: 4 }}>
+              <Text style={{ color: '#0f0', fontSize: 11, fontFamily: 'Courier' }}>
+                buf={ecgDataBuffer.length} min={min.toFixed(2)} max={max.toFixed(2)} mean={mean.toFixed(2)}
+              </Text>
+              <Text style={{ color: '#0f0', fontSize: 11, fontFamily: 'Courier' }}>
+                last5=[{last5}]
+              </Text>
+            </View>
+          );
+        })()}
+
         {/* ECG Waveform */}
         <View accessibilityLabel={`ECG waveform, current heart rate ${metrics.heartRate} BPM`}>
           <ECGWaveform
