@@ -21,6 +21,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { ECGWaveform } from '@/components/ecg-waveform';
 import { Spacing, Typography, BorderRadius } from '@/constants/theme';
+import type { ECGLeadBuffers } from '@/constants/ble-constants';
 import { getRecordingById, getRawSamples, type SavedRecording } from '@/services/recording-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -32,7 +33,7 @@ export default function RecordingDetailScreen() {
   const router = useRouter();
 
   const [recording, setRecording] = useState<SavedRecording | null>(null);
-  const [rawSamples, setRawSamples] = useState<number[] | null>(null);
+  const [rawSamples, setRawSamples] = useState<ECGLeadBuffers | null>(null);
   const [loading, setLoading] = useState(true);
 
   const bg = useThemeColor({}, 'background');
@@ -100,13 +101,13 @@ export default function RecordingDetailScreen() {
         </View>
 
         {/* ECG Waveform Replay */}
-        {rawSamples && rawSamples.length > 0 ? (
+        {rawSamples && rawSamples.leadII.length > 0 ? (
           <View style={styles.waveformSection}>
             <ECGWaveform
               width={WAVEFORM_WIDTH}
               height={WAVEFORM_HEIGHT}
               isAnimating={true}
-              staticData={rawSamples}
+              staticData={rawSamples.leadII}
             />
           </View>
         ) : (

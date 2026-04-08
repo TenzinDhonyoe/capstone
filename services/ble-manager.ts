@@ -8,7 +8,7 @@
 
 import { PermissionsAndroid, Platform, type Permission } from 'react-native';
 
-import { BLE_CONFIG, BLEError, BLEErrorType } from '@/constants/ble-constants';
+import { BLE_CONFIG, ECG_LEADS, BLEError, BLEErrorType, type LeadId } from '@/constants/ble-constants';
 
 type BlePlxModule = typeof import('react-native-ble-plx');
 type BleManagerInstance = import('react-native-ble-plx').BleManager;
@@ -252,9 +252,9 @@ export async function disconnectFromDevice(deviceId: string): Promise<void> {
     }
 }
 
-export function subscribeToECGData(
+export function subscribeToAllLeads(
     deviceId: string,
-    onData: (samples: number[]) => void,
+    onData: (lead: LeadId, samples: number[]) => void,
     onError: (error: BLEError) => void
 ): BLESubscription | null {
     const manager = getBleManager();
@@ -263,45 +263,53 @@ export function subscribeToECGData(
         return null;
     }
 
-    const transactionId = `ecg-stream-${deviceId}-${Date.now()}`;
-    ecgDecoderState.set(deviceId, { pendingLowByte: null });
+    const ts = Date.now();
+    const subscriptions: BleSubscriptionInstance[] = [];
+    const transactionIds: string[] = [];
 
-    const subscription = manager.monitorCharacteristicForDevice(
-        deviceId,
-        BLE_CONFIG.ESP32_SERVICE_UUID,
-        BLE_CONFIG.ECG_CHARACTERISTIC_UUID,
-        (error, characteristic) => {
-            if (error) {
-                onError(mapBleError(error, 'UNKNOWN', 'Error while monitoring ECG data'));
-                return;
-            }
+    for (const lead of ECG_LEADS) {
+        const decoderKey = `${deviceId}:${lead.id}`;
+        const transactionId = `ecg-${lead.id}-${deviceId}-${ts}`;
+        transactionIds.push(transactionId);
+        ecgDecoderState.set(decoderKey, { pendingLowByte: null });
 
-            if (!characteristic?.value) {
-                return;
-            }
+        const sub = manager.monitorCharacteristicForDevice(
+            deviceId,
+            BLE_CONFIG.ESP32_SERVICE_UUID,
+            lead.uuid,
+            (error, characteristic) => {
+                if (error) {
+                    onError(mapBleError(error, 'UNKNOWN', `Error monitoring ${lead.id} data`));
+                    return;
+                }
 
-            const decoderState = ecgDecoderState.get(deviceId) ?? { pendingLowByte: null };
-            const { samples, pendingLowByte } = decodeEcgSamples(characteristic.value, decoderState.pendingLowByte);
+                if (!characteristic?.value) return;
 
-            ecgDecoderState.set(deviceId, { pendingLowByte });
+                const state = ecgDecoderState.get(decoderKey) ?? { pendingLowByte: null };
+                const { samples, pendingLowByte } = decodeEcgSamples(characteristic.value, state.pendingLowByte);
+                ecgDecoderState.set(decoderKey, { pendingLowByte });
 
-            if (samples.length > 0) {
-                onData(samples);
-            }
-        },
-        transactionId
-    );
+                if (samples.length > 0) {
+                    onData(lead.id, samples);
+                }
+            },
+            transactionId
+        );
+
+        subscriptions.push(sub);
+    }
 
     return {
         remove: () => {
-            try {
-                manager.cancelTransaction(transactionId);
-            } catch {
-                // noop
+            for (const tid of transactionIds) {
+                try { manager.cancelTransaction(tid); } catch { /* noop */ }
             }
-
-            subscription.remove();
-            ecgDecoderState.delete(deviceId);
+            for (const sub of subscriptions) {
+                sub.remove();
+            }
+            for (const lead of ECG_LEADS) {
+                ecgDecoderState.delete(`${deviceId}:${lead.id}`);
+            }
         },
     };
 }

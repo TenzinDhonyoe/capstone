@@ -27,6 +27,7 @@ import {
   StatusColors,
   Typography,
 } from '@/constants/theme';
+import { EMPTY_LEAD_BUFFERS, type ECGLeadBuffers, type LeadId } from '@/constants/ble-constants';
 import { type ECGMetrics, initialECGMetrics, analyzeECGBuffer } from '@/services/ecg-analysis';
 import { useML } from '@/contexts/ml-context';
 import { getDisplayLabel } from '@/services/ml-types';
@@ -50,15 +51,15 @@ export default function ECGMonitorScreen() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartTime = useRef<Date | null>(null);
 
-  // Recording buffer: accumulates samples during recording
-  const recordingBufferRef = useRef<number[]>([]);
-  const lastBufferLengthRef = useRef(0);
+  // Recording buffer: accumulates samples for all 3 leads during recording
+  const recordingBufferRef = useRef<ECGLeadBuffers>({ leadI: [], leadII: [], leadIII: [] });
+  const lastBufferLengthRef = useRef<Record<LeadId, number>>({ leadI: 0, leadII: 0, leadIII: 0 });
   const metricsRef = useRef<ECGMetrics>(initialECGMetrics);
   const MAX_RECORDING_SAMPLES = 360 * 60 * 30; // 30 minutes max
 
   // BLE state
   const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions } = useBLE();
-  const { ecgDataBuffer } = useECGStream();
+  const { ecgDataBuffer, ecgLeadBuffers } = useECGStream();
 
   // ML state
   const {
@@ -106,35 +107,40 @@ export default function ECGMonitorScreen() {
     }
   }, [isConnected, ecgDataBuffer]);
 
-  // Accumulate samples into recording buffer during recording
+  // Accumulate samples into recording buffer for all 3 leads during recording
   useEffect(() => {
     if (!isRecording || !isConnected) return;
-    if (recordingBufferRef.current.length >= MAX_RECORDING_SAMPLES) return;
+    if (recordingBufferRef.current.leadII.length >= MAX_RECORDING_SAMPLES) return;
 
-    const currentLength = ecgDataBuffer.length;
-    const prevLength = lastBufferLengthRef.current;
+    const leads: { id: LeadId; buffer: number[] }[] = [
+      { id: 'leadI', buffer: ecgLeadBuffers.leadI },
+      { id: 'leadII', buffer: ecgLeadBuffers.leadII },
+      { id: 'leadIII', buffer: ecgLeadBuffers.leadIII },
+    ];
 
-    if (currentLength > prevLength) {
-      // New samples arrived — append only the delta
-      const newSamples = ecgDataBuffer.slice(prevLength);
-      for (let i = 0; i < newSamples.length; i++) {
-        recordingBufferRef.current.push(newSamples[i]);
+    for (const { id, buffer } of leads) {
+      const currentLength = buffer.length;
+      const prevLength = lastBufferLengthRef.current[id];
+
+      if (currentLength > prevLength) {
+        const newSamples = buffer.slice(prevLength);
+        for (let i = 0; i < newSamples.length; i++) {
+          recordingBufferRef.current[id].push(newSamples[i]);
+        }
+      } else if (currentLength < prevLength && currentLength > 0) {
+        for (let i = 0; i < currentLength; i++) {
+          recordingBufferRef.current[id].push(buffer[i]);
+        }
       }
-    } else if (currentLength < prevLength && currentLength > 0) {
-      // Buffer was trimmed (sliding window wrapped)
-      // Only append from index 0 to currentLength (the new post-trim data)
-      for (let i = 0; i < currentLength; i++) {
-        recordingBufferRef.current.push(ecgDataBuffer[i]);
-      }
+
+      lastBufferLengthRef.current[id] = currentLength;
     }
-
-    lastBufferLengthRef.current = currentLength;
-  }, [isRecording, isConnected, ecgDataBuffer]);
+  }, [isRecording, isConnected, ecgLeadBuffers]);
 
   // Reset buffer tracking when connection state changes
   useEffect(() => {
     if (isConnected) {
-      lastBufferLengthRef.current = 0;
+      lastBufferLengthRef.current = { leadI: 0, leadII: 0, leadIII: 0 };
     }
   }, [isConnected]);
 
@@ -143,8 +149,8 @@ export default function ECGMonitorScreen() {
     setElapsedSeconds(0);
     setSavedBanner(null);
     recordingStartTime.current = new Date();
-    recordingBufferRef.current = [];
-    lastBufferLengthRef.current = 0;
+    recordingBufferRef.current = { leadI: [], leadII: [], leadIII: [] };
+    lastBufferLengthRef.current = { leadI: 0, leadII: 0, leadIII: 0 };
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
@@ -190,7 +196,7 @@ export default function ECGMonitorScreen() {
       pathologyNote: (hasPVCs || hasPACs)
         ? `AI detected: ${summary.pvcCount} PVC, ${summary.pacCount} PAC out of ${summary.totalBeats} beats`
         : '',
-      sampleCount: recordingBufferRef.current.length,
+      sampleCount: recordingBufferRef.current.leadII.length,
       pvcCount: summary.pvcCount,
       pacCount: summary.pacCount,
       totalClassifiedBeats: summary.totalBeats,
@@ -198,11 +204,11 @@ export default function ECGMonitorScreen() {
 
     await saveRecording(recording);
 
-    // Save raw ECG samples to filesystem
-    if (recordingBufferRef.current.length > 0) {
+    // Save raw ECG samples (all 3 leads) to filesystem
+    if (recordingBufferRef.current.leadII.length > 0) {
       await saveRawSamples(id, recordingBufferRef.current);
     }
-    recordingBufferRef.current = [];
+    recordingBufferRef.current = { leadI: [], leadII: [], leadIII: [] };
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSavedBanner(id);

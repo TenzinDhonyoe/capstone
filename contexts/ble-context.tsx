@@ -19,7 +19,7 @@ import {
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 
-import { BLE_CONFIG, BLEError, ConnectionStatus } from '@/constants/ble-constants';
+import { BLE_CONFIG, EMPTY_LEAD_BUFFERS, BLEError, ConnectionStatus, type ECGLeadBuffers, type LeadId } from '@/constants/ble-constants';
 import {
     connectToDevice,
     destroyBleManager,
@@ -29,7 +29,7 @@ import {
     monitorDeviceConnection,
     requestBLEPermissions,
     scanForDevices,
-    subscribeToECGData,
+    subscribeToAllLeads,
     subscribeToClassification,
     waitForBluetoothPowerOn,
 } from '@/services/ble-manager';
@@ -58,8 +58,9 @@ interface BLEContextType {
     // Device discovery
     discoveredDevices: BLEDevice[];
 
-    // ECG data stream
+    // ECG data stream (Lead II = primary for analysis/display)
     ecgDataBuffer: number[];
+    ecgLeadBuffers: ECGLeadBuffers;
 
     // ESP32 classification packets
     lastClassification: ClassificationPacket | null;
@@ -100,8 +101,24 @@ export function BLEProvider({ children }: BLEProviderProps) {
     // Device discovery
     const [discoveredDevices, setDiscoveredDevices] = useState<BLEDevice[]>([]);
 
-    // ECG data
-    const [ecgDataBuffer, setEcgDataBuffer] = useState<number[]>([]);
+    // ECG data — 3 separate lead buffers
+    const [leadIBuffer, setLeadIBuffer] = useState<number[]>([]);
+    const [leadIIBuffer, setLeadIIBuffer] = useState<number[]>([]);
+    const [leadIIIBuffer, setLeadIIIBuffer] = useState<number[]>([]);
+
+    // Lead I is the primary lead for analysis/display (GPIO34 — main signal chain)
+    const ecgDataBuffer = leadIBuffer;
+    const ecgLeadBuffers: ECGLeadBuffers = {
+        leadI: leadIBuffer,
+        leadII: leadIIBuffer,
+        leadIII: leadIIIBuffer,
+    };
+
+    const leadSetters: Record<LeadId, React.Dispatch<React.SetStateAction<number[]>>> = {
+        leadI: setLeadIBuffer,
+        leadII: setLeadIIBuffer,
+        leadIII: setLeadIIIBuffer,
+    };
 
     // ESP32 classification
     const [lastClassification, setLastClassification] = useState<ClassificationPacket | null>(null);
@@ -316,13 +333,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
                 () => handleDisconnection(deviceId)
             );
 
-            // Subscribe to ECG data
-            ecgDataSubscription.current = subscribeToECGData(
+            // Subscribe to all 3 ECG leads
+            ecgDataSubscription.current = subscribeToAllLeads(
                 deviceId,
-                (samples) => {
-                    setEcgDataBuffer((prev) => {
+                (lead, samples) => {
+                    leadSetters[lead]((prev) => {
                         const newBuffer = [...prev, ...samples];
-                        // Keep buffer at max size
                         if (newBuffer.length > BLE_CONFIG.BUFFER_SIZE) {
                             return newBuffer.slice(-BLE_CONFIG.BUFFER_SIZE);
                         }
@@ -403,7 +419,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
         setConnectedDevice(null);
         setConnectionStatus('disconnected');
-        setEcgDataBuffer([]);
+        setLeadIBuffer([]);
+        setLeadIIBuffer([]);
+        setLeadIIIBuffer([]);
         setLastClassification(null);
         reconnectAttempts.current = 0;
 
@@ -426,6 +444,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         connectedDevice,
         discoveredDevices,
         ecgDataBuffer,
+        ecgLeadBuffers,
         lastClassification,
         signalQuality,
         error,
@@ -455,6 +474,6 @@ export function useBLEConnection() {
 }
 
 export function useECGStream() {
-    const { ecgDataBuffer, isConnected } = useBLE();
-    return { ecgDataBuffer, isConnected };
+    const { ecgDataBuffer, ecgLeadBuffers, isConnected } = useBLE();
+    return { ecgDataBuffer, ecgLeadBuffers, isConnected };
 }

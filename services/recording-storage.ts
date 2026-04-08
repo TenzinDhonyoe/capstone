@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
+import type { ECGLeadBuffers } from '@/constants/ble-constants';
 
 const RECORDINGS_KEY = 'sowa_recordings';
 
@@ -60,9 +61,9 @@ export async function deleteRecording(id: string): Promise<void> {
 }
 
 /**
- * Save raw ECG samples to filesystem for waveform replay.
+ * Save raw ECG samples (all 3 leads) to filesystem for waveform replay.
  */
-export async function saveRawSamples(recordingId: string, samples: number[]): Promise<void> {
+export async function saveRawSamples(recordingId: string, samples: ECGLeadBuffers): Promise<void> {
   try {
     const file = new File(Paths.document, 'recordings', `${recordingId}.json`);
     await file.write(JSON.stringify(samples));
@@ -73,14 +74,20 @@ export async function saveRawSamples(recordingId: string, samples: number[]): Pr
 
 /**
  * Load raw ECG samples from filesystem.
- * Returns null if no samples exist for this recording.
+ * Handles backwards compatibility: old recordings stored as a flat number[]
+ * are returned as Lead II data (the primary analysis lead).
  */
-export async function getRawSamples(recordingId: string): Promise<number[] | null> {
+export async function getRawSamples(recordingId: string): Promise<ECGLeadBuffers | null> {
   try {
     const file = new File(Paths.document, 'recordings', `${recordingId}.json`);
     if (!file.exists) return null;
     const data = await file.text();
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    // Backwards compat: old recordings are flat arrays (single lead)
+    if (Array.isArray(parsed)) {
+      return { leadI: parsed, leadII: parsed, leadIII: [] };
+    }
+    return parsed as ECGLeadBuffers;
   } catch {
     return null;
   }
