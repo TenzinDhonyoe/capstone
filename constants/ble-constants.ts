@@ -13,7 +13,7 @@ export const BLE_CONFIG = {
     CLASSIFICATION_CHARACTERISTIC_UUID: 'beb5483e-36e1-4688-b7f5-ea07361b26a9',
 
     // Device identification
-    DEVICE_NAME_PREFIX: 'Gluco',
+    DEVICE_NAME_PREFIX: 'SOWA',
 
     // Scanning configuration
     SCAN_TIMEOUT_MS: 10000,

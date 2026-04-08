@@ -72,13 +72,12 @@ export function ECGWaveform({
     return () => clearInterval(interval);
   }, [isAnimating, isLive, data?.length, samplesPerTick]);
 
-  // Build the waveform path
+  // Build the waveform path (auto-scales Y to fit visible data)
   const waveformPath = useMemo(() => {
     if (!data || data.length === 0) return null;
 
     const path = Skia.Path.Make();
-    const baseline = height * 0.55;
-    const amplitude = height * 0.4;
+    const margin = height * 0.1; // 10% padding top and bottom
 
     // Live: render the most recent visiblePoints samples (tail of buffer).
     // Mock: scroll through buffer using animated offset.
@@ -87,12 +86,30 @@ export function ECGWaveform({
       ? Math.max(0, data.length - visiblePoints)
       : (isAnimating ? offset : 0);
 
+    // Find min/max of the visible window for auto-scaling
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    for (let i = 0; i < pointsToRender; i++) {
+      const dataIndex = isLive
+        ? startIndex + i
+        : (startIndex + i) % data.length;
+      const v = data[dataIndex];
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+    }
+
+    // Avoid division by zero for flat signals
+    const range = maxVal - minVal;
+    const scale = range > 0 ? (height - 2 * margin) / range : 1;
+    const mid = (minVal + maxVal) / 2;
+    const baseline = height / 2;
+
     for (let i = 0; i < pointsToRender; i++) {
       const dataIndex = isLive
         ? startIndex + i
         : (startIndex + i) % data.length;
       const x = i * pointSpacing;
-      const y = baseline - data[dataIndex] * amplitude;
+      const y = baseline - (data[dataIndex] - mid) * scale;
 
       if (i === 0) {
         path.moveTo(x, y);
@@ -172,7 +189,8 @@ export function ECGWaveform({
               })();
 
           // Only render if within visible window
-          if (relativeIndex < 0 || relativeIndex >= Math.min(visiblePoints, data.length)) return null;
+          const pointsToRender = Math.min(visiblePoints, data.length);
+          if (relativeIndex < 0 || relativeIndex >= pointsToRender) return null;
 
           const x = relativeIndex * pointSpacing;
           const dataIndex = isLive
@@ -180,9 +198,22 @@ export function ECGWaveform({
             : annotation.sampleIndex % data.length;
           if (dataIndex < 0 || dataIndex >= data.length) return null;
 
-          const baseline = height * 0.55;
-          const amplitude = height * 0.4;
-          const y = baseline - data[dataIndex] * amplitude;
+          // Auto-scale Y (same as waveform path)
+          const margin = height * 0.1;
+          let minVal = Infinity;
+          let maxVal = -Infinity;
+          const annStart = isLive ? Math.max(0, data.length - visiblePoints) : (isAnimating ? offset : 0);
+          for (let j = 0; j < pointsToRender; j++) {
+            const di = isLive ? annStart + j : (annStart + j) % data.length;
+            const v = data[di];
+            if (v < minVal) minVal = v;
+            if (v > maxVal) maxVal = v;
+          }
+          const range = maxVal - minVal;
+          const scale = range > 0 ? (height - 2 * margin) / range : 1;
+          const mid = (minVal + maxVal) / 2;
+          const baseline = height / 2;
+          const y = baseline - (data[dataIndex] - mid) * scale;
           const dotSize = annotation.size ?? 4;
 
           return (

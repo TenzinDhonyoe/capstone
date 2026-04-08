@@ -8,11 +8,13 @@ export interface Recording {
   qtInterval: number;
   duration: string;
   durationSeconds: number;
-  rhythm: string;
   condition: string;
   status: 'optimal' | 'normal' | 'warning' | 'critical';
   hasPathology: boolean;
   pathologyNote?: string;
+  pvcCount?: number;
+  pacCount?: number;
+  totalClassifiedBeats?: number;
 }
 
 export const mockRecordings: Recording[] = [
@@ -26,10 +28,10 @@ export const mockRecordings: Recording[] = [
     qtInterval: 398,
     duration: '2:30',
     durationSeconds: 150,
-    rhythm: 'Normal Sinus Rhythm',
-    condition: 'Normal Sinus Rhythm',
+    condition: 'Normal',
     status: 'optimal',
     hasPathology: false,
+    totalClassifiedBeats: 180,
   },
   {
     id: 'rec-002',
@@ -41,11 +43,13 @@ export const mockRecordings: Recording[] = [
     qtInterval: 412,
     duration: '1:45',
     durationSeconds: 105,
-    rhythm: 'Sinus Tachycardia',
-    condition: 'Sinus Tachycardia',
+    condition: 'PVCs Detected',
     status: 'warning',
     hasPathology: true,
-    pathologyNote: 'Elevated heart rate detected. Consider follow-up if persistent.',
+    pathologyNote: 'AI detected: 5 PVC, 0 PAC out of 120 beats',
+    pvcCount: 5,
+    pacCount: 0,
+    totalClassifiedBeats: 120,
   },
   {
     id: 'rec-003',
@@ -57,10 +61,10 @@ export const mockRecordings: Recording[] = [
     qtInterval: 390,
     duration: '3:00',
     durationSeconds: 180,
-    rhythm: 'Normal Sinus Rhythm',
-    condition: 'Normal Sinus Rhythm',
+    condition: 'Normal',
     status: 'optimal',
     hasPathology: false,
+    totalClassifiedBeats: 204,
   },
   {
     id: 'rec-004',
@@ -72,10 +76,10 @@ export const mockRecordings: Recording[] = [
     qtInterval: 385,
     duration: '2:00',
     durationSeconds: 120,
-    rhythm: 'Normal Sinus Rhythm',
-    condition: 'Normal Sinus Rhythm',
+    condition: 'Normal',
     status: 'optimal',
     hasPathology: false,
+    totalClassifiedBeats: 130,
   },
   {
     id: 'rec-005',
@@ -87,11 +91,13 @@ export const mockRecordings: Recording[] = [
     qtInterval: 425,
     duration: '1:30',
     durationSeconds: 90,
-    rhythm: 'Sinus Tachycardia',
-    condition: 'Sinus Tachycardia',
+    condition: 'PACs Detected',
     status: 'warning',
     hasPathology: true,
-    pathologyNote: 'Elevated heart rate with reduced HRV. Monitor stress levels.',
+    pathologyNote: 'AI detected: 0 PVC, 3 PAC out of 95 beats',
+    pvcCount: 0,
+    pacCount: 3,
+    totalClassifiedBeats: 95,
   },
   {
     id: 'rec-006',
@@ -103,10 +109,10 @@ export const mockRecordings: Recording[] = [
     qtInterval: 378,
     duration: '2:15',
     durationSeconds: 135,
-    rhythm: 'Sinus Bradycardia',
-    condition: 'Sinus Bradycardia',
-    status: 'normal',
+    condition: 'Normal',
+    status: 'optimal',
     hasPathology: false,
+    totalClassifiedBeats: 131,
   },
   {
     id: 'rec-007',
@@ -118,11 +124,13 @@ export const mockRecordings: Recording[] = [
     qtInterval: 445,
     duration: '1:00',
     durationSeconds: 60,
-    rhythm: 'Atrial Fibrillation',
-    condition: 'Atrial Fibrillation',
+    condition: 'PVCs & PACs Detected',
     status: 'critical',
     hasPathology: true,
-    pathologyNote: 'Irregular rhythm detected. Consult a healthcare provider immediately.',
+    pathologyNote: 'AI detected: 8 PVC, 4 PAC out of 90 beats. Consult a healthcare provider.',
+    pvcCount: 8,
+    pacCount: 4,
+    totalClassifiedBeats: 90,
   },
   {
     id: 'rec-008',
@@ -134,10 +142,10 @@ export const mockRecordings: Recording[] = [
     qtInterval: 395,
     duration: '2:45',
     durationSeconds: 165,
-    rhythm: 'Normal Sinus Rhythm',
-    condition: 'Normal Sinus Rhythm',
+    condition: 'Normal',
     status: 'optimal',
     hasPathology: false,
+    totalClassifiedBeats: 192,
   },
   {
     id: 'rec-009',
@@ -149,10 +157,10 @@ export const mockRecordings: Recording[] = [
     qtInterval: 402,
     duration: '2:00',
     durationSeconds: 120,
-    rhythm: 'Normal Sinus Rhythm',
-    condition: 'Normal Sinus Rhythm',
+    condition: 'Normal',
     status: 'normal',
     hasPathology: false,
+    totalClassifiedBeats: 156,
   },
   {
     id: 'rec-010',
@@ -164,9 +172,9 @@ export const mockRecordings: Recording[] = [
     qtInterval: 400,
     duration: '3:00',
     durationSeconds: 180,
-    rhythm: 'Normal Sinus Rhythm',
-    condition: 'Normal Sinus Rhythm',
+    condition: 'Normal',
     status: 'optimal',
     hasPathology: false,
+    totalClassifiedBeats: 222,
   },
 ];

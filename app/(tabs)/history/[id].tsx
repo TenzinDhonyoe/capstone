@@ -170,10 +170,10 @@ export default function RecordingDetailScreen() {
           ]}
         >
           <Text style={[styles.rhythmLabel, { color: secondaryText }]}>
-            Rhythm Classification
+            Beat Classification
           </Text>
           <Text style={[styles.rhythmValue, { color: textColor }]}>
-            {recording.rhythm ?? recording.condition}
+            {recording.condition}
           </Text>
           <StatusBadge status={recording.status} label={recording.condition} />
         </View>

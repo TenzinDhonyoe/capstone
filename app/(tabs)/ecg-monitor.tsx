@@ -165,6 +165,16 @@ export default function ECGMonitorScreen() {
     const mins = Math.floor(elapsedSeconds / 60);
     const secs = elapsedSeconds % 60;
 
+    const hasPVCs = summary.pvcCount > 0;
+    const hasPACs = summary.pacCount > 0;
+    const condition = hasPVCs && hasPACs
+      ? 'PVCs & PACs Detected'
+      : hasPVCs
+        ? 'PVCs Detected'
+        : hasPACs
+          ? 'PACs Detected'
+          : 'Normal';
+
     const recording: SavedRecording = {
       id,
       date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -174,16 +184,12 @@ export default function ECGMonitorScreen() {
       hrv: currentMetrics.hrv,
       prInterval: currentMetrics.prInterval,
       qtInterval: currentMetrics.qtInterval,
-      rhythm: currentMetrics.rhythm,
-      condition: currentMetrics.rhythm,
-      status: currentMetrics.rhythm === 'Normal Sinus Rhythm' ? 'optimal' : 'warning',
-      hasPathology: (currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...')
-        || summary.pvcCount > 0 || summary.pacCount > 0,
-      pathologyNote: summary.pvcCount > 0 || summary.pacCount > 0
-        ? `AI detected: ${summary.pvcCount} PVC, ${summary.pacCount} PAC`
-        : (currentMetrics.rhythm !== 'Normal Sinus Rhythm' && currentMetrics.rhythm !== 'Analyzing...'
-          ? `Detected: ${currentMetrics.rhythm}`
-          : ''),
+      condition,
+      status: (hasPVCs || hasPACs) ? 'warning' : 'optimal',
+      hasPathology: hasPVCs || hasPACs,
+      pathologyNote: (hasPVCs || hasPACs)
+        ? `AI detected: ${summary.pvcCount} PVC, ${summary.pacCount} PAC out of ${summary.totalBeats} beats`
+        : '',
       sampleCount: recordingBufferRef.current.length,
       pvcCount: summary.pvcCount,
       pacCount: summary.pacCount,
@@ -357,15 +363,25 @@ export default function ECGMonitorScreen() {
           </View>
         )}
 
-        {/* Signal Quality + Rhythm Row */}
+        {/* Signal Quality + Classification Row */}
         <View style={styles.statusRow}>
           <View style={styles.statusItem}>
             <SignalQualityBar quality={isConnected ? bleSignalQuality : 0} />
           </View>
           <View style={[styles.rhythmBadge, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-            <Text style={[styles.rhythmLabel, { color: secondaryText }]}>Rhythm</Text>
+            <Text style={[styles.rhythmLabel, { color: secondaryText }]}>Classification</Text>
             <Text style={[styles.rhythmValue, { color: textColor }]} numberOfLines={1}>
-              {isConnected ? metrics.rhythm : '--'}
+              {isConnected
+                ? summary.totalBeats === 0
+                  ? 'Analyzing...'
+                  : summary.pvcCount > 0 && summary.pacCount > 0
+                    ? 'PVCs & PACs Detected'
+                    : summary.pvcCount > 0
+                      ? 'PVCs Detected'
+                      : summary.pacCount > 0
+                        ? 'PACs Detected'
+                        : 'Normal'
+                : '--'}
             </Text>
           </View>
         </View>
@@ -412,22 +428,13 @@ export default function ECGMonitorScreen() {
           </View>
         )}
 
-        {/* Pathology Alert (ML pattern-based or rhythm-based) */}
+        {/* Pathology Alert (ML pattern-based) */}
         {isConnected && patternAlert && (
           <View style={styles.section}>
             <AlertBanner
               type={patternAlert.level === 'warning' ? 'warning' : 'info'}
               title={patternAlert.title}
               message={patternAlert.message}
-            />
-          </View>
-        )}
-        {isConnected && !patternAlert && metrics.rhythm !== 'Normal Sinus Rhythm' && metrics.rhythm !== 'Analyzing...' && (
-          <View style={styles.section}>
-            <AlertBanner
-              type="warning"
-              title="Abnormal Rhythm Detected"
-              message={`Current classification: ${metrics.rhythm}. Consult a healthcare provider.`}
             />
           </View>
         )}

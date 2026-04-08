@@ -2,8 +2,8 @@
  * ECG Signal Analysis Service
  *
  * Computes heart rate (BPM), HRV (SDNN), PR interval, QT interval,
- * rhythm classification, and signal quality from real ECG sample
- * buffers received via BLE from the ESP32.
+ * and signal quality from real ECG sample buffers received via BLE
+ * from the ESP32.
  */
 
 import { BLE_CONFIG } from '@/constants/ble-constants';
@@ -13,7 +13,6 @@ export interface ECGMetrics {
   hrv: number;
   prInterval: number;   // ms, 0 = unable to detect
   qtInterval: number;   // ms, 0 = unable to detect
-  rhythm: string;
   signalQuality: number;
 }
 
@@ -22,7 +21,6 @@ export const initialECGMetrics: ECGMetrics = {
   hrv: 0,
   prInterval: 0,
   qtInterval: 0,
-  rhythm: 'Analyzing...',
   signalQuality: 0,
 };
 
@@ -51,7 +49,6 @@ export function analyzeECGBuffer(samples: number[]): ECGMetrics | null {
       hrv: 0,
       prInterval: 0,
       qtInterval: 0,
-      rhythm: 'Analyzing...',
       signalQuality,
     };
   }
@@ -75,7 +72,6 @@ export function analyzeECGBuffer(samples: number[]): ECGMetrics | null {
       hrv: 0,
       prInterval: 0,
       qtInterval: 0,
-      rhythm: 'Analyzing...',
       signalQuality,
     };
   }
@@ -95,14 +91,12 @@ export function analyzeECGBuffer(samples: number[]): ECGMetrics | null {
   // PQRST feature extraction (best-effort on single-lead)
   const prInterval = computePRInterval(window, rPeakIndices);
   const qtInterval = computeQTInterval(window, rPeakIndices);
-  const rhythm = classifyRhythm(heartRate, rrIntervals);
 
   return {
     heartRate: Math.max(30, Math.min(220, heartRate)),
     hrv: Math.max(0, Math.min(200, hrv)),
     prInterval,
     qtInterval,
-    rhythm,
     signalQuality,
   };
 }
@@ -270,62 +264,6 @@ function computeQTInterval(samples: number[], rPeakIndices: number[]): number {
 
   const avgQT = qtIntervals.reduce((a, b) => a + b, 0) / qtIntervals.length;
   return Math.round(avgQT);
-}
-
-/**
- * Classify rhythm based on heart rate and RR interval regularity.
- * Uses coefficient of variation > 25% with irregular morphology check
- * to avoid false positives from respiratory sinus arrhythmia.
- */
-function classifyRhythm(heartRate: number, rrIntervals: number[]): string {
-  if (rrIntervals.length < 3) return 'Analyzing...';
-
-  const meanRR = rrIntervals.reduce((a, b) => a + b, 0) / rrIntervals.length;
-  const variance =
-    rrIntervals.reduce((sum, rr) => sum + (rr - meanRR) ** 2, 0) /
-    (rrIntervals.length - 1);
-  const stdDev = Math.sqrt(variance);
-  const cv = (stdDev / meanRR) * 100; // Coefficient of variation as percentage
-
-  // Check for respiratory sinus arrhythmia pattern:
-  // RSA shows gradual acceleration/deceleration (sinusoidal pattern)
-  // True irregularity shows random jumps between intervals
-  const hasRespiratoryPattern = detectRespiratoryPattern(rrIntervals);
-
-  // Irregular if CV > 25% AND not a respiratory pattern
-  if (cv > 25 && !hasRespiratoryPattern) {
-    return 'Irregular Rhythm';
-  }
-
-  // Rate-based classification for regular rhythms
-  if (heartRate < 60) return 'Sinus Bradycardia';
-  if (heartRate > 100) return 'Sinus Tachycardia';
-  return 'Normal Sinus Rhythm';
-}
-
-/**
- * Detect respiratory sinus arrhythmia (RSA) pattern.
- * RSA shows smooth, gradual changes in RR intervals following breathing.
- * Returns true if the pattern looks like RSA (not true irregularity).
- */
-function detectRespiratoryPattern(rrIntervals: number[]): boolean {
-  if (rrIntervals.length < 6) return false;
-
-  // Count direction changes: RSA has few direction changes (smooth wave)
-  // True irregularity has many random direction changes
-  let directionChanges = 0;
-  for (let i = 2; i < rrIntervals.length; i++) {
-    const prev = rrIntervals[i - 1] - rrIntervals[i - 2];
-    const curr = rrIntervals[i] - rrIntervals[i - 1];
-    if ((prev > 0 && curr < 0) || (prev < 0 && curr > 0)) {
-      directionChanges++;
-    }
-  }
-
-  // RSA: smooth wave has few direction changes relative to length
-  // Random irregularity: ~50% of intervals change direction
-  const changeRate = directionChanges / (rrIntervals.length - 2);
-  return changeRate < 0.4; // Smooth pattern = likely RSA
 }
 
 /**

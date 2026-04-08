@@ -12,7 +12,6 @@ export interface SavedRecording {
   hrv: number;
   prInterval: number;
   qtInterval: number;
-  rhythm: string;
   condition: string;
   status: 'optimal' | 'normal' | 'warning' | 'critical';
   hasPathology: boolean;
