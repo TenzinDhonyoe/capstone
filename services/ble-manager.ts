@@ -252,6 +252,15 @@ export async function disconnectFromDevice(deviceId: string): Promise<void> {
     }
 }
 
+// Map characteristic UUID to lead ID for routing notifications correctly.
+// react-native-ble-plx may deliver notifications from any characteristic
+// to any monitoring callback on the same service, so we must check the
+// actual characteristic UUID rather than trusting the callback routing.
+const uuidToLead = new Map<string, LeadId>();
+for (const lead of ECG_LEADS) {
+    uuidToLead.set(lead.uuid.toLowerCase(), lead.id);
+}
+
 export function subscribeToAllLeads(
     deviceId: string,
     onData: (lead: LeadId, samples: number[]) => void,
@@ -267,11 +276,14 @@ export function subscribeToAllLeads(
     const subscriptions: BleSubscriptionInstance[] = [];
     const transactionIds: string[] = [];
 
+    // Initialize decoder state for each lead
     for (const lead of ECG_LEADS) {
-        const decoderKey = `${deviceId}:${lead.id}`;
+        ecgDecoderState.set(`${deviceId}:${lead.id}`, { pendingLowByte: null });
+    }
+
+    for (const lead of ECG_LEADS) {
         const transactionId = `ecg-${lead.id}-${deviceId}-${ts}`;
         transactionIds.push(transactionId);
-        ecgDecoderState.set(decoderKey, { pendingLowByte: null });
 
         const sub = manager.monitorCharacteristicForDevice(
             deviceId,
@@ -285,12 +297,18 @@ export function subscribeToAllLeads(
 
                 if (!characteristic?.value) return;
 
+                // Determine actual lead from the characteristic UUID
+                // (don't trust callback routing — the library may misroute)
+                const charUuid = (characteristic.uuid ?? lead.uuid).toLowerCase();
+                const actualLead = uuidToLead.get(charUuid) ?? lead.id;
+                const decoderKey = `${deviceId}:${actualLead}`;
+
                 const state = ecgDecoderState.get(decoderKey) ?? { pendingLowByte: null };
                 const { samples, pendingLowByte } = decodeEcgSamples(characteristic.value, state.pendingLowByte);
                 ecgDecoderState.set(decoderKey, { pendingLowByte });
 
                 if (samples.length > 0) {
-                    onData(lead.id, samples);
+                    onData(actualLead, samples);
                 }
             },
             transactionId
