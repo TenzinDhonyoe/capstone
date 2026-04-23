@@ -9,28 +9,42 @@ import {
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { BorderRadius, Spacing, Typography } from '@/constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
   title: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  size?: ButtonSize;
+  fullWidth?: boolean;
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
   icon?: React.ReactNode;
+  iconRight?: React.ReactNode;
 }
+
+// Size specs meet 44pt min tap target at 'sm' and above.
+const sizeSpecs: Record<ButtonSize, { paddingV: number; paddingH: number; minHeight: number; text: TextStyle }> = {
+  sm: { paddingV: Spacing.sm, paddingH: Spacing.md, minHeight: 44, text: Typography.caption },
+  md: { paddingV: Spacing.md - 4, paddingH: Spacing.lg, minHeight: 48, text: Typography.bodyBold },
+  lg: { paddingV: Spacing.md, paddingH: Spacing.lg, minHeight: 56, text: Typography.bodyBold },
+};
 
 export function Button({
   title,
   onPress,
   variant = 'primary',
+  size = 'lg',
+  fullWidth = true,
   disabled = false,
   loading = false,
   style,
   textStyle,
   icon,
+  iconRight,
 }: ButtonProps) {
   const buttonBg = useThemeColor({}, 'buttonBackground');
   const buttonText = useThemeColor({}, 'buttonText');
@@ -47,6 +61,8 @@ export function Button({
         return { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: cardBorder };
       case 'ghost':
         return { backgroundColor: 'transparent' };
+      case 'danger':
+        return { backgroundColor: 'rgba(232, 139, 139, 0.15)' };
     }
   };
 
@@ -59,13 +75,23 @@ export function Button({
       case 'outline':
       case 'ghost':
         return accent;
+      case 'danger':
+        return '#E88B8B';
     }
   };
+
+  const spec = sizeSpecs[size];
 
   return (
     <TouchableOpacity
       style={[
         styles.button,
+        {
+          paddingVertical: spec.paddingV,
+          paddingHorizontal: spec.paddingH,
+          minHeight: spec.minHeight,
+          width: fullWidth ? '100%' : undefined,
+        },
         getButtonStyle(),
         disabled && styles.disabled,
         style,
@@ -79,9 +105,10 @@ export function Button({
       ) : (
         <>
           {icon}
-          <Text style={[styles.text, { color: getTextColor() }, textStyle]}>
+          <Text style={[spec.text, { color: getTextColor() }, textStyle]}>
             {title}
           </Text>
+          {iconRight}
         </>
       )}
     </TouchableOpacity>
@@ -93,14 +120,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.lg,
-    width: '100%',
     gap: Spacing.sm,
-  },
-  text: {
-    ...Typography.bodyBold,
   },
   disabled: {
     opacity: 0.5,

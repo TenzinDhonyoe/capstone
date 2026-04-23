@@ -17,6 +17,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { MetricCard } from '@/components/metric-card';
 import { RecordingCard } from '@/components/recording-card';
 import { AlertBanner } from '@/components/alert-banner';
+import { Button } from '@/components/ui/button';
 import { BrandColors, Spacing, Typography, BorderRadius, StatusColors } from '@/constants/theme';
 import { getRecordings, type SavedRecording } from '@/services/recording-storage';
 import { analyzeECGBuffer } from '@/services/ecg-analysis';
@@ -76,9 +77,6 @@ export default function DashboardScreen() {
               {user?.firstName ?? 'User'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color={textColor} />
-          </TouchableOpacity>
         </View>
 
         {/* Device Status Card */}
@@ -100,14 +98,14 @@ export default function DashboardScreen() {
                 <Text style={styles.liveHRUnit}>BPM</Text>
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.deviceCardAction}
+            <Button
+              title="Open ECG Monitor"
+              size="md"
               onPress={() => router.push('/(tabs)/ecg-monitor')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.deviceCardActionText}>Open ECG Monitor</Text>
-              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
+              style={styles.deviceCardAction}
+              textStyle={{ color: '#FFFFFF' }}
+              iconRight={<Ionicons name="arrow-forward" size={16} color="#FFFFFF" />}
+            />
           </View>
         ) : (
           <TouchableOpacity
@@ -165,12 +163,6 @@ export default function DashboardScreen() {
             title="Last Recording"
             value={recentRecordings[0]?.duration ?? '--'}
             trend="stable"
-          />
-          <MetricCard
-            title="Health Score"
-            value={85}
-            unit="/100"
-            status="optimal"
           />
         </ScrollView>
 
@@ -298,11 +290,10 @@ const styles = StyleSheet.create({
   liveHR: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 4,
+    gap: Spacing.xs,
   },
   liveHRValue: {
-    fontSize: 28,
-    fontWeight: '700',
+    ...Typography.largeNumber,
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
@@ -311,17 +302,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
   deviceCardAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
-  },
-  deviceCardActionText: {
-    ...Typography.bodyBold,
-    color: '#FFFFFF',
   },
   // Disconnected device card
   deviceCardDisconnected: {
@@ -345,14 +327,14 @@ const styles = StyleSheet.create({
   },
   deviceCardSubtitleDisconnected: {
     ...Typography.caption,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: Spacing.lg,
-    marginBottom: Spacing.sm + 2,
+    marginBottom: Spacing.sm,
   },
   sectionTitle: {
     ...Typography.h3,
@@ -362,7 +344,7 @@ const styles = StyleSheet.create({
     color: BrandColors.accent,
   },
   metricsRow: {
-    gap: Spacing.sm + 2,
+    gap: Spacing.sm,
     paddingRight: Spacing.md,
   },
   emptyRecordings: {

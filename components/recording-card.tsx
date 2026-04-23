@@ -85,8 +85,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   bpm: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Typography.h3,
   },
   bpmUnit: {
     ...Typography.caption,
@@ -96,6 +95,6 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   conditionRow: {
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
 });

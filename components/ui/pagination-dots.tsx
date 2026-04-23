@@ -5,7 +5,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { BrandColors, Spacing } from '@/constants/theme';
+import { BorderRadius, BrandColors, Spacing } from '@/constants/theme';
 
 interface PaginationDotsProps {
   count: number;
@@ -41,6 +41,6 @@ const styles = StyleSheet.create({
   },
   dot: {
     height: 8,
-    borderRadius: 4,
+    borderRadius: BorderRadius.full,
   },
 });

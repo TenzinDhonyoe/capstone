@@ -10,6 +10,7 @@ import {
 } from '@shopify/react-native-skia';
 
 import { BLE_CONFIG } from '@/constants/ble-constants';
+import { BorderRadius, Typography } from '@/constants/theme';
 import { ecgSignalBuffer, SAMPLE_RATE as MOCK_SAMPLE_RATE } from '@/data/mock-ecg-signal';
 
 export interface WaveformAnnotation {
@@ -240,7 +241,7 @@ export function ECGWaveform({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: BorderRadius.md,
     overflow: 'hidden',
   },
   waitingOverlay: {
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   waitingText: {
-    fontSize: 14,
+    ...Typography.caption,
     fontWeight: '500',
     letterSpacing: 0.5,
   },

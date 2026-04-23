@@ -1,7 +1,7 @@
 import { StyleSheet, View, Text, TouchableOpacity, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { BrandColors, Spacing, Typography } from '@/constants/theme';
+import { BorderRadius, BrandColors, Spacing, Typography } from '@/constants/theme';
 
 type SettingsRowType = 'navigation' | 'toggle' | 'value';
 
@@ -85,14 +85,14 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.sm + 4,
+    paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: Spacing.sm + 2,
+    gap: Spacing.sm,
   },
   iconContainer: {
-    width: 30,
-    height: 30,
-    borderRadius: 7,
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -18,6 +18,7 @@ export function SignalQualityBar({ quality }: SignalQualityBarProps) {
   const cardBg = useThemeColor({}, 'card');
   const cardBorder = useThemeColor({}, 'cardBorder');
   const secondaryText = useThemeColor({}, 'textSecondary');
+  const trackBg = useThemeColor({}, 'inputBackground');
 
   return (
     <View style={[styles.container, { backgroundColor: cardBg, borderColor: cardBorder }]}>
@@ -25,7 +26,7 @@ export function SignalQualityBar({ quality }: SignalQualityBarProps) {
         <Text style={[styles.label, { color: secondaryText }]}>Signal Quality</Text>
         <Text style={[styles.qualityLabel, { color: config.color }]}>{config.label}</Text>
       </View>
-      <View style={styles.barBackground}>
+      <View style={[styles.barBackground, { backgroundColor: trackBg }]}>
         <View
           style={[
             styles.barFill,
@@ -59,12 +60,11 @@ const styles = StyleSheet.create({
   },
   barBackground: {
     height: 6,
-    backgroundColor: '#E5E5EA',
-    borderRadius: 3,
+    borderRadius: BorderRadius.xs,
     overflow: 'hidden',
   },
   barFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: BorderRadius.xs,
   },
 });

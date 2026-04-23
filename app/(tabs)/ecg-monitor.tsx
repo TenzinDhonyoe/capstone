@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { AlertBanner } from '@/components/alert-banner';
 import { BLEConnectionStatus } from '@/components/ble-connection-status';
@@ -20,6 +21,7 @@ import { BLEDeviceList } from '@/components/ble-device-list';
 import { ECGWaveform, type WaveformAnnotation } from '@/components/ecg-waveform';
 import { SignalQualityBar } from '@/components/signal-quality-bar';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { Button } from '@/components/ui/button';
 import {
   BrandColors,
   BorderRadius,
@@ -58,7 +60,7 @@ export default function ECGMonitorScreen() {
   const MAX_RECORDING_SAMPLES = 360 * 60 * 30; // 30 minutes max
 
   // BLE state
-  const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions } = useBLE();
+  const { isConnected, connectionStatus, signalQuality: bleSignalQuality, requestPermissions, isDemoMode } = useBLE();
   const { ecgDataBuffer, ecgLeadBuffers } = useECGStream();
 
   // ML state
@@ -95,6 +97,7 @@ export default function ECGMonitorScreen() {
   const cardBorder = useThemeColor({}, 'cardBorder');
   const buttonBg = useThemeColor({}, 'buttonBackground');
   const buttonTextColor = useThemeColor({}, 'buttonText');
+  const tabBarHeight = useBottomTabBarHeight();
 
   // Update metrics from real ECG data when connected
   useEffect(() => {
@@ -173,13 +176,14 @@ export default function ECGMonitorScreen() {
 
     const hasPVCs = summary.pvcCount > 0;
     const hasPACs = summary.pacCount > 0;
-    const condition = hasPVCs && hasPACs
+    const baseCondition = hasPVCs && hasPACs
       ? 'PVCs & PACs Detected'
       : hasPVCs
         ? 'PVCs Detected'
         : hasPACs
           ? 'PACs Detected'
           : 'Normal';
+    const condition = isDemoMode ? `${baseCondition} (Demo)` : baseCondition;
 
     const recording: SavedRecording = {
       id,
@@ -235,9 +239,12 @@ export default function ECGMonitorScreen() {
   const formatInterval = (value: number): string => (value > 0 ? String(value) : 'N/A');
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: bg }]} edges={['top', 'left', 'right']}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarHeight + 80 + (isRecording ? 32 : 0) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -297,25 +304,6 @@ export default function ECGMonitorScreen() {
             <Ionicons name="chevron-forward" size={18} color={secondaryText} />
           </TouchableOpacity>
         )}
-
-        {/* Debug: raw buffer stats */}
-        {isConnected && ecgDataBuffer.length > 0 && (() => {
-          const last100 = ecgDataBuffer.slice(-100);
-          const min = Math.min(...last100);
-          const max = Math.max(...last100);
-          const mean = last100.reduce((a, b) => a + b, 0) / last100.length;
-          const last5 = ecgDataBuffer.slice(-5).map(v => v.toFixed(2)).join(', ');
-          return (
-            <View style={{ backgroundColor: '#000', padding: 8, borderRadius: 8, marginBottom: 4 }}>
-              <Text style={{ color: '#0f0', fontSize: 11, fontFamily: 'Courier' }}>
-                buf={ecgDataBuffer.length} min={min.toFixed(2)} max={max.toFixed(2)} mean={mean.toFixed(2)}
-              </Text>
-              <Text style={{ color: '#0f0', fontSize: 11, fontFamily: 'Courier' }}>
-                last5=[{last5}]
-              </Text>
-            </View>
-          );
-        })()}
 
         {/* ECG Waveform */}
         <View accessibilityLabel={`ECG waveform, current heart rate ${metrics.heartRate} BPM`}>
@@ -464,64 +452,61 @@ export default function ECGMonitorScreen() {
           </View>
         )}
 
-        {/* Recording Timer */}
-        {isRecording && (
-          <View style={styles.timerContainer}>
-            <Ionicons name="timer-outline" size={20} color={secondaryText} />
-            <Text style={[styles.timerText, { color: textColor }]}>
-              {formatTime(elapsedSeconds)}
-            </Text>
-          </View>
-        )}
-
         {/* Medical Disclaimer */}
         {isConnected && isMLEnabled && (
           <Text style={[styles.disclaimer, { color: secondaryText }]}>
             For educational purposes only. Not a medical diagnosis.
           </Text>
         )}
+      </ScrollView>
 
-        {/* Start/Stop Button */}
-        {isConnected ? (
-          <TouchableOpacity
-            style={[
-              styles.recordButton,
-              isRecording
-                ? styles.stopButton
-                : { backgroundColor: buttonBg },
-            ]}
-            onPress={isRecording ? stopRecording : startRecording}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={isRecording ? 'Stop recording' : 'Start recording'}
-          >
-            <Ionicons
-              name={isRecording ? 'stop' : 'play'}
-              size={24}
-              color={isRecording ? '#FFFFFF' : buttonTextColor}
-            />
-            <Text style={[styles.recordButtonText, !isRecording && { color: buttonTextColor }]}>
-              {isRecording ? 'Stop Recording' : 'Start Recording'}
+      {/* Sticky bottom action bar */}
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            backgroundColor: bg,
+            borderTopColor: cardBorder,
+            paddingBottom: tabBarHeight + Spacing.sm,
+          },
+        ]}
+      >
+        {isRecording && (
+          <View style={styles.timerContainer}>
+            <Ionicons name="timer-outline" size={18} color={secondaryText} />
+            <Text style={[styles.timerText, { color: textColor }]}>
+              {formatTime(elapsedSeconds)}
             </Text>
-          </TouchableOpacity>
+          </View>
+        )}
+        {isConnected ? (
+          <Button
+            title={isRecording ? 'Stop Recording' : 'Start Recording'}
+            variant={isRecording ? 'secondary' : 'primary'}
+            onPress={isRecording ? stopRecording : startRecording}
+            style={isRecording ? { backgroundColor: StatusColors.red } : undefined}
+            textStyle={isRecording ? { color: '#FFFFFF' } : undefined}
+            icon={
+              <Ionicons
+                name={isRecording ? 'stop' : 'play'}
+                size={24}
+                color={isRecording ? '#FFFFFF' : buttonTextColor}
+              />
+            }
+          />
         ) : (
-          <TouchableOpacity
-            style={[styles.recordButton, styles.disabledButton]}
+          <Button
+            title="Connect Sensor to Record"
+            variant="outline"
             onPress={() => {
               requestPermissions();
               setShowDeviceList(true);
             }}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Connect sensor to record"
-          >
-            <Ionicons name="bluetooth-outline" size={24} color="#999999" />
-            <Text style={[styles.recordButtonText, styles.disabledButtonText]}>
-              Connect Sensor to Record
-            </Text>
-          </TouchableOpacity>
+            icon={<Ionicons name="bluetooth-outline" size={24} color={secondaryText} />}
+            textStyle={{ color: secondaryText }}
+          />
         )}
-      </ScrollView>
+      </View>
 
       {/* BLE Device List Modal */}
       <BLEDeviceList
@@ -538,7 +523,17 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.md,
+  },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
   },
   header: {
     flexDirection: 'row',
@@ -560,7 +555,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     backgroundColor: StatusColors.green,
-    padding: Spacing.sm + 2,
+    padding: Spacing.sm,
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.md,
   },
@@ -590,15 +585,15 @@ const styles = StyleSheet.create({
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.full,
   },
   liveDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: BorderRadius.full,
     backgroundColor: StatusColors.red,
   },
   liveText: {
@@ -619,15 +614,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   heroValue: {
-    fontSize: 56,
-    fontWeight: '700',
-    lineHeight: 64,
+    ...Typography.display,
     fontVariant: ['tabular-nums'],
   },
   heroUnit: {
-    fontSize: 20,
+    ...Typography.h3,
     fontWeight: '500',
-    lineHeight: 28,
   },
   // Status row
   statusRow: {
@@ -652,7 +644,7 @@ const styles = StyleSheet.create({
   rhythmValue: {
     ...Typography.caption,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   // Detail metrics
   detailToggle: {
@@ -680,16 +672,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.sm,
     alignItems: 'center',
-    gap: 2,
+    gap: Spacing.xs,
   },
   detailLabel: {
     ...Typography.small,
     fontWeight: '500',
   },
   detailValue: {
-    fontSize: 22,
+    ...Typography.h3,
     fontWeight: '700',
-    lineHeight: 28,
     fontVariant: ['tabular-nums'],
   },
   detailUnit: {
@@ -703,42 +694,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    marginTop: Spacing.lg,
   },
   timerText: {
-    fontSize: 28,
-    fontWeight: '600',
+    ...Typography.h3,
     fontVariant: ['tabular-nums'],
-  },
-  recordButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    marginTop: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  stopButton: {
-    backgroundColor: StatusColors.red,
-  },
-  disabledButton: {
-    backgroundColor: '#E5E5E5',
-  },
-  disabledButtonText: {
-    color: '#999999',
-  },
-  recordButtonText: {
-    ...Typography.bodyBold,
-    color: '#FFFFFF',
   },
   // ML Classification styles
   mlStatusContainer: {
     marginTop: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    padding: Spacing.sm + 2,
-    gap: 4,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
   },
   mlStatusRow: {
     flexDirection: 'row',
