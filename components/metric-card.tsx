@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   },
   cardCompact: {
     minWidth: 100,
-    padding: Spacing.sm + 2,
+    padding: Spacing.sm,
   },
   title: {
     ...Typography.caption,
@@ -80,15 +80,14 @@ const styles = StyleSheet.create({
     ...Typography.metric,
   },
   valueCompact: {
-    fontSize: 24,
+    ...Typography.h2,
     fontWeight: '700',
-    lineHeight: 30,
   },
   unit: {
     ...Typography.metricUnit,
   },
   trend: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '600',
   },
 });

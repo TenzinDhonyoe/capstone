@@ -81,31 +81,6 @@ export default function ProfileScreen() {
           />
         </View>
 
-        {/* Recording Defaults */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>
-            Recording Defaults
-          </Text>
-        </View>
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-          <SettingsRow
-            icon="timer"
-            iconColor={StatusColors.green}
-            title="Duration"
-            type="value"
-            value="3 minutes"
-            onPress={() => {}}
-          />
-          <SettingsRow
-            icon="pulse"
-            iconColor={BrandColors.orange}
-            title="Lead Selection"
-            type="value"
-            value="Lead I"
-            onPress={() => {}}
-          />
-        </View>
-
         {/* Appearance */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: textColor }]}>
@@ -134,20 +109,6 @@ export default function ProfileScreen() {
             title="Version"
             type="value"
             value="1.0.0"
-          />
-          <SettingsRow
-            icon="document-text"
-            iconColor="#6B7280"
-            title="Terms of Service"
-            type="navigation"
-            onPress={() => {}}
-          />
-          <SettingsRow
-            icon="shield-checkmark"
-            iconColor="#6B7280"
-            title="Privacy Policy"
-            type="navigation"
-            onPress={() => {}}
           />
         </View>
 

@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Button } from '@/components/ui/button';
 import { InputField } from '@/components/ui/input-field';
-import { BrandColors, Spacing, Typography } from '@/constants/theme';
+import { BorderRadius, BrandColors, Spacing, Typography } from '@/constants/theme';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -76,14 +76,15 @@ export default function LoginScreen() {
               }
             />
 
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => router.push('/(auth)/forgot-password')}
-            >
-              <Text style={[styles.forgotPasswordText, { color: BrandColors.orange }]}>
-                Forgot Password?
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.forgotPasswordWrapper}>
+              <Button
+                title="Forgot Password?"
+                variant="ghost"
+                size="sm"
+                fullWidth={false}
+                onPress={() => router.push('/(auth)/forgot-password')}
+              />
+            </View>
 
             <Button
               title="Sign In"
@@ -128,8 +129,8 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 80,
     height: 80,
-    borderRadius: 20,
-    backgroundColor: '#FFF3EB',
+    borderRadius: BorderRadius.lg,
+    backgroundColor: BrandColors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.md,
@@ -145,13 +146,9 @@ const styles = StyleSheet.create({
   form: {
     gap: Spacing.xs,
   },
-  forgotPassword: {
+  forgotPasswordWrapper: {
     alignSelf: 'flex-end',
-    marginBottom: Spacing.md,
-  },
-  forgotPasswordText: {
-    ...Typography.caption,
-    fontWeight: '600',
+    marginBottom: Spacing.sm,
   },
   footer: {
     flexDirection: 'row',

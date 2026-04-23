@@ -131,6 +131,16 @@ export const Typography = {
     fontWeight: '500' as const,
     lineHeight: 18,
   },
+  display: {
+    fontSize: 56,
+    fontWeight: '700' as const,
+    lineHeight: 64,
+  },
+  largeNumber: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    lineHeight: 34,
+  },
 };
 
 export const BorderRadius = {

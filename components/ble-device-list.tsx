@@ -5,7 +5,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -22,8 +22,11 @@ import {
     StatusColors,
     Typography,
 } from '@/constants/theme';
+import { Button } from '@/components/ui/button';
 import { useBLE } from '@/hooks/use-ble';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { DEMO_SCENARIOS, type DemoScenario } from '@/data/demo-scenarios';
+import { clearLastDevice, getLastDevice } from '@/services/device-storage';
 
 // Internal device type matching the context
 interface BLEDevice {
@@ -48,12 +51,15 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
         connectedDevice,
         discoveredDevices,
         error,
+        isDemoMode,
+        demoScenario,
         requestPermissions,
         startScan,
         stopScan,
         connectToDevice,
         disconnect,
         clearError,
+        startDemoMode,
     } = useBLE();
 
     const bg = useThemeColor({}, 'background');
@@ -63,6 +69,17 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
     const secondaryText = useThemeColor({}, 'textSecondary');
 
     const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null);
+    const [hasSavedDevice, setHasSavedDevice] = useState(false);
+
+    useEffect(() => {
+        if (!visible) return;
+        getLastDevice().then((id) => setHasSavedDevice(id !== null));
+    }, [visible, isConnected]);
+
+    const handleForgetDevice = async () => {
+        await clearLastDevice();
+        setHasSavedDevice(false);
+    };
 
     const handleConnect = async (device: BLEDevice) => {
         setConnectingDeviceId(device.id);
@@ -81,6 +98,12 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
         }
         clearError();
         startScan();
+    };
+
+    const handleDemoScenario = async (scenario: DemoScenario) => {
+        if (isScanning) stopScan();
+        await startDemoMode(scenario);
+        onClose();
     };
 
     const getRSSIIcon = (rssi: number | null): 'cellular' | 'cellular-outline' => {
@@ -191,17 +214,18 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
                                     </Text>
                                 </View>
                             </View>
-                            <TouchableOpacity
-                                style={styles.disconnectButton}
+                            <Button
+                                title="Disconnect"
+                                variant="danger"
+                                size="sm"
+                                fullWidth={false}
                                 onPress={disconnect}
-                            >
-                                <Text style={styles.disconnectText}>Disconnect</Text>
-                            </TouchableOpacity>
+                            />
                         </View>
                     </View>
                 )}
 
-                {/* Available Devices */}
+                {/* Available Devices — primary path */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                         <Text style={[styles.sectionTitle, { color: secondaryText }]}>
@@ -230,31 +254,107 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
                             <Text style={[styles.emptyText, { color: secondaryText }]}>
                                 {isScanning
                                     ? 'Looking for ECG sensors...'
-                                    : 'No devices found. Tap scan to search.'}
+                                    : 'No devices found yet.'}
                             </Text>
+                            <View style={styles.emptyStateCta}>
+                                <Button
+                                    title={isScanning ? 'Stop Scanning' : 'Scan for Devices'}
+                                    variant="secondary"
+                                    onPress={isScanning ? stopScan : handleScan}
+                                    disabled={!isBluetoothEnabled}
+                                    icon={
+                                        <Ionicons
+                                            name={isScanning ? 'stop' : 'search'}
+                                            size={20}
+                                            color="#FFFFFF"
+                                        />
+                                    }
+                                />
+                            </View>
                         </View>
                     )}
                 </View>
 
-                {/* Scan Button */}
-                <TouchableOpacity
-                    style={[
-                        styles.scanButton,
-                        isScanning && styles.scanButtonScanning,
-                    ]}
-                    onPress={isScanning ? stopScan : handleScan}
-                    disabled={!isBluetoothEnabled}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons
-                        name={isScanning ? 'stop' : 'search'}
-                        size={20}
-                        color="#FFFFFF"
-                    />
-                    <Text style={styles.scanButtonText}>
-                        {isScanning ? 'Stop Scanning' : 'Scan for Devices'}
+                {/* Persistent scan button when devices found */}
+                {discoveredDevices.length > 0 && (
+                    <View style={styles.scanWrapper}>
+                        <Button
+                            title={isScanning ? 'Stop Scanning' : 'Scan Again'}
+                            variant="secondary"
+                            onPress={isScanning ? stopScan : handleScan}
+                            disabled={!isBluetoothEnabled}
+                            icon={
+                                <Ionicons
+                                    name={isScanning ? 'stop' : 'search'}
+                                    size={20}
+                                    color="#FFFFFF"
+                                />
+                            }
+                        />
+                    </View>
+                )}
+
+                {/* Demo Data — secondary fallback, only when no real devices in play */}
+                {!isConnected && discoveredDevices.length === 0 && !isScanning && (
+                <View style={styles.demoSection}>
+                    <Text style={[styles.sectionTitle, { color: secondaryText }]}>
+                        Or use demo data
                     </Text>
-                </TouchableOpacity>
+                    <Text style={[styles.demoHint, { color: secondaryText }]}>
+                        Try the app without a sensor
+                    </Text>
+                    {DEMO_SCENARIOS.map((scenario) => {
+                        const isActive = isDemoMode && demoScenario === scenario.id;
+                        return (
+                            <TouchableOpacity
+                                key={scenario.id}
+                                style={[
+                                    styles.demoItem,
+                                    {
+                                        backgroundColor: cardBg,
+                                        borderColor: isActive ? StatusColors.green : cardBorder,
+                                    },
+                                ]}
+                                onPress={() => handleDemoScenario(scenario.id)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons
+                                    name={scenario.icon}
+                                    size={22}
+                                    color={isActive ? StatusColors.green : textColor}
+                                />
+                                <View style={styles.demoText}>
+                                    <Text style={[styles.deviceName, { color: textColor }]}>
+                                        {scenario.label}
+                                    </Text>
+                                    <Text style={[styles.deviceId, { color: secondaryText }]}>
+                                        {scenario.description}
+                                    </Text>
+                                </View>
+                                {isActive ? (
+                                    <View style={styles.connectedBadge}>
+                                        <Text style={styles.connectedText}>Active</Text>
+                                    </View>
+                                ) : (
+                                    <Ionicons name="play-circle-outline" size={22} color={secondaryText} />
+                                )}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+                )}
+
+                {hasSavedDevice && !isConnected && (
+                    <TouchableOpacity
+                        style={styles.forgetButton}
+                        onPress={handleForgetDevice}
+                        activeOpacity={0.6}
+                    >
+                        <Text style={[styles.forgetText, { color: secondaryText }]}>
+                            Forget saved device (stops auto-reconnect)
+                        </Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </Modal>
     );
@@ -293,6 +393,27 @@ const styles = StyleSheet.create({
     section: {
         flex: 1,
         marginTop: Spacing.md,
+    },
+    demoSection: {
+        marginTop: Spacing.md,
+        marginBottom: Spacing.sm,
+    },
+    demoHint: {
+        ...Typography.small,
+        marginTop: Spacing.xs,
+        marginBottom: Spacing.sm,
+    },
+    demoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
+        padding: Spacing.sm,
+        borderRadius: BorderRadius.lg,
+        borderWidth: 1,
+        marginBottom: Spacing.sm,
+    },
+    demoText: {
+        flex: 1,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -336,7 +457,7 @@ const styles = StyleSheet.create({
     },
     deviceId: {
         ...Typography.small,
-        marginTop: 2,
+        marginTop: Spacing.xs,
     },
     deviceActions: {
         flexDirection: 'row',
@@ -346,7 +467,7 @@ const styles = StyleSheet.create({
     connectedBadge: {
         backgroundColor: StatusColors.green + '20',
         paddingHorizontal: Spacing.sm,
-        paddingVertical: 4,
+        paddingVertical: Spacing.xs,
         borderRadius: BorderRadius.full,
     },
     connectedText: {
@@ -354,45 +475,34 @@ const styles = StyleSheet.create({
         color: StatusColors.green,
         fontWeight: '600',
     },
-    disconnectButton: {
-        backgroundColor: StatusColors.red + '20',
-        paddingHorizontal: Spacing.md,
-        paddingVertical: Spacing.xs,
-        borderRadius: BorderRadius.md,
-    },
-    disconnectText: {
-        ...Typography.body,
-        color: StatusColors.red,
-        fontWeight: '600',
-    },
     listContent: {
         paddingBottom: Spacing.xl,
     },
     emptyState: {
-        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         gap: Spacing.md,
+        paddingVertical: Spacing.xl,
     },
     emptyText: {
         ...Typography.body,
         textAlign: 'center',
     },
-    scanButton: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: Spacing.sm,
-        backgroundColor: '#1C1C1E',
-        paddingVertical: Spacing.md,
-        borderRadius: BorderRadius.lg,
+    emptyStateCta: {
+        width: '100%',
+        paddingHorizontal: Spacing.lg,
+        marginTop: Spacing.sm,
+    },
+    scanWrapper: {
         marginTop: Spacing.md,
     },
-    scanButtonScanning: {
-        backgroundColor: StatusColors.orange,
+    forgetButton: {
+        alignItems: 'center',
+        paddingVertical: Spacing.sm,
+        marginTop: Spacing.xs,
     },
-    scanButtonText: {
-        ...Typography.bodyBold,
-        color: '#FFFFFF',
+    forgetText: {
+        ...Typography.small,
+        textDecorationLine: 'underline',
     },
 });
