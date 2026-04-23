@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/contexts/auth-context';
 import { useBLE, useECGStream } from '@/hooks/use-ble';
+import { useML } from '@/contexts/ml-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { MetricCard } from '@/components/metric-card';
 import { RecordingCard } from '@/components/recording-card';
@@ -34,6 +35,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { isConnected, connectedDevice, connectionStatus } = useBLE();
   const { ecgDataBuffer } = useECGStream();
+  const { summary: liveSummary } = useML();
 
   const [recordings, setRecordings] = useState<SavedRecording[]>([]);
 
@@ -51,7 +53,14 @@ export default function DashboardScreen() {
   );
 
   const recentRecordings = recordings.slice(0, 3);
-  const latestPathology = recordings.find((r) => r.hasPathology);
+  const latestRecording = recordings[0];
+
+  // Alert priority: live detection > latest saved recording > all-clear
+  const livePVC = isConnected && liveSummary.pvcCount > 0;
+  const livePAC = isConnected && liveSummary.pacCount > 0;
+  const hasLivePathology = livePVC || livePAC;
+  const hasRecordedPathology =
+    !!latestRecording && ((latestRecording.pvcCount ?? 0) > 0 || (latestRecording.pacCount ?? 0) > 0);
 
   // Get real metrics when connected
   const realMetrics = isConnected && ecgDataBuffer.length > 0
@@ -170,25 +179,27 @@ export default function DashboardScreen() {
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: textColor }]}>Alerts</Text>
         </View>
-        {latestPathology ? (
+        {hasLivePathology ? (
           <AlertBanner
             type="warning"
-            title={
-              (latestPathology.pvcCount ?? 0) > 0 || (latestPathology.pacCount ?? 0) > 0
-                ? 'Pathology Detected'
-                : latestPathology.condition
-            }
-            message={
-              (latestPathology.pvcCount ?? 0) > 0 || (latestPathology.pacCount ?? 0) > 0
-                ? `Last recording: ${latestPathology.pvcCount ?? 0} PVCs, ${latestPathology.pacCount ?? 0} PACs detected by AI`
-                : latestPathology.pathologyNote
-            }
+            title="Pathology Detected (Live)"
+            message={`Live: ${liveSummary.pvcCount} PVC${liveSummary.pvcCount === 1 ? '' : 's'}, ${liveSummary.pacCount} PAC${liveSummary.pacCount === 1 ? '' : 's'} in the last 60s`}
+          />
+        ) : hasRecordedPathology ? (
+          <AlertBanner
+            type="warning"
+            title="Pathology Detected"
+            message={`Last recording: ${latestRecording.pvcCount ?? 0} PVCs, ${latestRecording.pacCount ?? 0} PACs detected by AI`}
           />
         ) : (
           <AlertBanner
             type="success"
             title="All Clear"
-            message="No pathologies detected in recent recordings."
+            message={
+              latestRecording
+                ? 'No pathologies in your most recent recording.'
+                : 'Take your first recording to see results here.'
+            }
           />
         )}
 
