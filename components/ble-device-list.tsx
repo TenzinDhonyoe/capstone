@@ -8,8 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    FlatList,
     Modal,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -111,12 +111,13 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
         return rssi > -60 ? 'cellular' : 'cellular-outline';
     };
 
-    const renderDevice = ({ item }: { item: BLEDevice }) => {
+    const renderDevice = (item: BLEDevice) => {
         const isConnecting = connectingDeviceId === item.id;
         const isThisDeviceConnected = connectedDevice?.id === item.id;
 
         return (
             <TouchableOpacity
+                key={item.id}
                 style={[styles.deviceItem, { backgroundColor: cardBg, borderColor: cardBorder }]}
                 onPress={() => !isThisDeviceConnected && handleConnect(item)}
                 disabled={isConnecting || isThisDeviceConnected}
@@ -173,6 +174,10 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
                     </TouchableOpacity>
                 </View>
 
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
                 {/* Bluetooth Status */}
                 {!isBluetoothEnabled && (
                     <View style={[styles.statusBanner, { backgroundColor: StatusColors.red + '20' }]}>
@@ -237,13 +242,9 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
                     </View>
 
                     {discoveredDevices.length > 0 ? (
-                        <FlatList
-                            data={discoveredDevices}
-                            keyExtractor={(item) => item.id}
-                            renderItem={renderDevice}
-                            contentContainerStyle={styles.listContent}
-                            showsVerticalScrollIndicator={false}
-                        />
+                        <View style={styles.deviceListContent}>
+                            {discoveredDevices.map(renderDevice)}
+                        </View>
                     ) : (
                         <View style={styles.emptyState}>
                             <Ionicons
@@ -343,6 +344,7 @@ export function BLEDeviceList({ visible, onClose }: BLEDeviceListProps) {
                     })}
                 </View>
                 )}
+                </ScrollView>
 
                 {hasSavedDevice && !isConnected && (
                     <TouchableOpacity
@@ -391,8 +393,13 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     section: {
-        flex: 1,
         marginTop: Spacing.md,
+    },
+    scrollContent: {
+        paddingBottom: Spacing.md,
+    },
+    deviceListContent: {
+        gap: Spacing.sm,
     },
     demoSection: {
         marginTop: Spacing.md,
@@ -474,9 +481,6 @@ const styles = StyleSheet.create({
         ...Typography.small,
         color: StatusColors.green,
         fontWeight: '600',
-    },
-    listContent: {
-        paddingBottom: Spacing.xl,
     },
     emptyState: {
         justifyContent: 'center',
